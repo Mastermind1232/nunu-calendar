@@ -40,7 +40,13 @@ function renderWidget() {
   el.innerHTML = `<button type="button" class="date" title="Open the calendar"><i class="fas fa-calendar-days"></i><span>${esc(longDate(date))}</span></button>` +
     (gm ? `<div class="ctrl"><button type="button" data-adv="-1" title="Back one day"><i class="fas fa-chevron-left"></i></button><button type="button" data-adv="1" title="Forward one day"><i class="fas fa-chevron-right"></i></button><button type="button" class="week" data-adv="7" title="A week passes">+1 week</button></div>` : "");
   el.querySelector(".date").addEventListener("click", () => CalendarApp.open());
-  el.querySelectorAll("[data-adv]").forEach((b) => b.addEventListener("click", () => advance(Number(b.dataset.adv)).catch((e) => ui.notifications.error(e.message))));
+  el.querySelectorAll("[data-adv]").forEach((b) => b.addEventListener("click", async () => {
+    const days = Number(b.dataset.adv);
+    try {
+      if (days === 7 && !await Dialog.confirm({title: "A week passes", content: `<p>Move the calendar forward seven days, to <b>${esc(longDate(addDays(getDate(), 7)))}</b>?</p><p>This is announced in chat.</p>`})) return;
+      await advance(days);
+    } catch (e) { ui.notifications.error(e.message); }
+  }));
 }
 
 /* ------------------------------------------------------------------ */
