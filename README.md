@@ -26,7 +26,6 @@ New versions are GitHub releases with a `module.zip`; Foundry's Update button pi
 
 ## Roadmap
 
-- Hustle outcome text is a placeholder until the book's wording is loaded.
 - Reading the date from the HQ sheet for monthly checks.
 
 ## Tests

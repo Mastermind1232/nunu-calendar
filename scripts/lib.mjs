@@ -110,7 +110,7 @@ export const downtimeRecords = (date, users) => users.map((u) => ({id: `downtime
 export const mergeQueue = (queue, records) => { const seen = new Set(queue.map((r) => r.id)); return [...queue, ...records.filter((r) => !seen.has(r.id))]; };
 
 /* ---------------- Hustles (Cyberpunk RED core, downtime) ---------------- */
-/** Payout bands by Role rank 1-4, 5-7, 8-10. `bands` indexes PAY for d6 results 1-6. Flavor text is a placeholder until the book's wording is loaded. */
+/** Payout bands by Role rank 1-4, 5-7, 8-10. `bands` indexes PAY for d6 results 1-6. Outcome text follows the book's Hustle tables. */
 export const PAY = [[0, 100, 300], [100, 200, 500], [200, 300, 600], [300, 500, 800]];
 export const HUSTLES = {
   rockerboy: {name: "Rockerboy", bands: [2, 0, 3, 3, 3, 2], text: ["played a small local gig", "found no gigs or jobs to be had this week", "played a big gig for a rich Corporate or Local Personality", "got some royalties in for their most recent Data Pool download", "were the opening act for a Big-Name group", "made a personal appearance that netted a large fee"]},
@@ -122,7 +122,7 @@ export const HUSTLES = {
   lawman: {name: "Lawman", bands: [1, 2, 0, 1, 2, 2], text: ["made a few minor busts, business as usual", "got a reward from a grateful citizen. Or was it a bribe?", "had a bust go bad, and it came out of their salary", "had a quiet week; collected a paycheck and that was it", "pulled off a major drug or smuggling bust and gained a bonus from the boss", "took down a big gang and got some of a \"civil seizure\" bonus"]},
   exec: {name: "Exec", bands: [3, 0, 2, 3, 3, 2], text: ["landed a moderate success on a project and earned a reward bonus", "had a quiet week; Corporate was unimpressed and they lost a bonus", "collected a paycheck and that was it", "got some dirt on a rival and used it to score a bonus", "pulled off a major project success and gained a bonus from the Head Office", "took out a legitimate target that was threatening a job and took their funding"]},
   fixer: {name: "Fixer", bands: [2, 2, 2, 0, 2, 3], text: ["got a Media some information for a good bribe", "got a Rocker a good gig for their 12% fee", "helped a client locate a desirable item they needed and got a cut", "had a deal go south and are keeping their head down till it blows over", "got a Solo or Netrunner a profitable \"job\" and took their agency fee", "brought in a rare, illegal, or very hard to get item for a client"]},
-  nomad: {name: "Nomad", bands: [1, 1, 1, 2, 1, 0], text: ["ran cargo", "ran convoy security", "made a small smuggling run", "made a major smuggling run", "delivered passengers", "found no transport work"]},
+  nomad: {name: "Nomad", bands: [1, 1, 1, 2, 1, 0], text: ["made a legit shipment", "protected a shipment", "smuggled some small contraband", "smuggled a huge shipment", "delivered a client safely to destination", "couldn't find work this week, legit or otherwise"]},
 };
 export const ROLE_BY_ABILITY = {operator: "fixer", medicine: "medtech", "charismatic impact": "rockerboy", backup: "lawman", credibility: "media", "combat awareness": "solo", maker: "tech", interface: "netrunner", moto: "nomad", teamwork: "exec"};
 export function hustleResult(table, rank, die) {
