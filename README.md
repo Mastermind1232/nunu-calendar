@@ -12,9 +12,15 @@ The NuNu campaign clock for Foundry VTT 12. Foundry owns "what day is it"; the v
 
 Disable SmallTime; this takes its corner.
 
-## Install and update on The Forge
+## Install and update
 
-Drag the local `UPLOAD TO FORGE/NuNu/Modules/nunu-calendar` folder into `modules` in the Forge Assets Library (Don't Unzip). First time: install by manifest URL `https://assets.forge-vtt.com/6a7ca306f6a96908b438164c/modules/nunu-calendar/module.json`. After that, drag the two files in again and press Update in Foundry's module list.
+Install by manifest URL:
+
+```
+https://raw.githubusercontent.com/Mastermind1232/nunu-calendar/main/module.json
+```
+
+New versions are GitHub releases with a `module.zip`; Foundry's Update button picks them up.
 
 ## Roadmap
 
