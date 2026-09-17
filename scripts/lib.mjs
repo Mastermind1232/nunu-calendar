@@ -113,7 +113,7 @@ export const mergeQueue = (queue, records) => { const seen = new Set(queue.map((
 /** Payout bands by Role rank 1-4, 5-7, 8-10. `bands` indexes PAY for d6 results 1-6. Flavor text is a placeholder until the book's wording is loaded. */
 export const PAY = [[0, 100, 300], [100, 200, 500], [200, 300, 600], [300, 500, 800]];
 export const HUSTLES = {
-  rockerboy: {name: "Rockerboy", bands: [2, 0, 3, 3, 3, 2], text: ["played a small local show", "found no bookings this week", "played a private headline gig for a rich client", "recorded and released a Data Pool download", "opened for a bigger act", "played a private party for a fee"]},
+  rockerboy: {name: "Rockerboy", bands: [2, 0, 3, 3, 3, 2], text: ["played a small local gig", "found no gigs or jobs to be had this week", "played a big gig for a rich Corporate or Local Personality", "got some royalties in for their most recent Data Pool download", "were the opening act for a Big-Name group", "made a personal appearance that netted a large fee"]},
   solo: {name: "Solo", bands: [1, 2, 2, 1, 0, 1], text: ["took a budget protection contract", "took a premium protection contract", "took a high-risk contract", "hired out as muscle", "laid low all week", "took an enforcement contract"]},
   netrunner: {name: "Netrunner", bands: [1, 2, 0, 2, 2, 2], text: ["sold a small batch of data", "sold corporate data", "had an unproductive week", "recovered lost data for a client", "collected a ransomware payoff", "was paid to sabotage a network"]},
   tech: {name: "Tech", bands: [0, 1, 2, 1, 1, 1], text: ["found no commissions", "restored some salvage", "took a security contract", "serviced someone's cybertech", "serviced weapons", "took a sabotage commission"]},
