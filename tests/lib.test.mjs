@@ -90,3 +90,11 @@ test("hustle payouts follow the rank bands", () => {
   for (const t of Object.values(HUSTLES)) { assert.equal(t.bands.length, 6); assert.equal(t.text.length, 6); }
   assert.throws(() => hustleResult("rockerboy", 11, 1));
 });
+
+test("named players can each owe a different amount", () => {
+  const rent = normalizeEvent({id: "rent", title: "Rent", start: "2045-09-28", repeat: "monthly", visibility: "users", users: ["a", "b"], effect: "pay", amounts: {a: "1100", b: "1800"}});
+  assert.deepEqual(rent.amounts, {a: 1100, b: 1800});
+  const due = dueOn([rent], {y: 2045, m: 9, d: 28}, [{id: "a"}, {id: "b"}, {id: "c"}]);
+  assert.deepEqual(due.map((r) => [r.userId, r.amount]), [["a", 1100], ["b", 1800]]);
+  assert.throws(() => normalizeEvent({title: "Rent", start: "2045-09-28", visibility: "users", users: ["a"], effect: "pay"}), /amount/);
+});

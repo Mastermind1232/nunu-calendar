@@ -48,10 +48,12 @@ export function normalizeEvent(raw = {}) {
   const amount = Math.max(0, Math.floor(Number(raw.amount) || 0));
   const items = effect === "items" ? (raw.items ?? []).filter((i) => i && i.uuid).map((i) => ({uuid: String(i.uuid), name: String(i.name ?? "Item").slice(0, 120), qty: Math.max(1, Math.floor(Number(i.qty) || 1))})) : [];
   if (effect !== "none" && visibility === "gm") throw new Error("A GM-only event cannot charge, pay or hand out anything. Set who it applies to.");
-  if ((effect === "pay" || effect === "credit") && amount <= 0) throw new Error("Enter the amount of eddies.");
   if (effect === "items" && !items.length) throw new Error("Drop at least one item onto the event.");
+  const amounts = {};
+  if (["pay", "credit"].includes(effect) && visibility === "users") for (const u of users) { const v = Math.floor(Number(raw.amounts?.[u])); if (Number.isFinite(v) && v > 0) amounts[u] = v; }
+  if ((effect === "pay" || effect === "credit") && amount <= 0 && !Object.keys(amounts).length) throw new Error("Enter the amount of eddies.");
   return {id: String(raw.id || ""), title: title.slice(0, 120), start, end, repeat, visibility, users, notes: String(raw.notes ?? "").slice(0, 2000),
-    effect, amount, reason: String(raw.reason ?? "").trim().slice(0, 200), items};
+    effect, amount, amounts, reason: String(raw.reason ?? "").trim().slice(0, 200), items};
 }
 /** Does the event land on this day? Repeats are single-day; ranges do not repeat. */
 export function occursOn(ev, date) {
@@ -98,7 +100,7 @@ export function dueOn(events, date, users) {
     if (ev.effect === "none" || !occursOn(ev, date)) continue;
     for (const u of affectedUsers(ev, users)) {
       records.push({id: `${ev.id}:${key(date)}:${u.id}`, userId: String(u.id), kind: ev.effect, eventId: ev.id, title: ev.title, date: key(date),
-        amount: ev.amount, reason: ev.reason || ev.title, items: ev.items});
+        amount: ev.amounts?.[String(u.id)] ?? ev.amount, reason: ev.reason || ev.title, items: ev.items});
     }
   }
   return records;

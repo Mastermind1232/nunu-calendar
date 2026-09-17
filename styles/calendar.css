@@ -43,3 +43,4 @@
 .nunu-cal-dialog button[data-button="pay"],.nunu-cal-dialog button[data-button="rest"]{background:#1f7a3a;color:#fff;border-color:#2f9a4a}
 .nunu-cal-dialog button[data-button="skip"]{background:#8b1e1e;color:#fff;border-color:#b12a2a}
 .nunu-cal-dialog button[data-button="hustle"]{background:#26394e;color:#fff;border-color:#667e99}
+.nunu-cal-form .users .per{width:80px;display:inline;margin:0 0 0 6px}

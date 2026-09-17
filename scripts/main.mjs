@@ -197,7 +197,7 @@ async function eventDialog(ev = {}) {
     <div class="row"><label>Start (YYYY-MM-DD)<input name="start" value="${esc(ev.start)}" placeholder="2045-09-28"></label><label>End, optional<input name="end" value="${esc(ev.end)}" placeholder="for sessions that run days"></label></div>
     <div class="row"><label>Repeats ${sel("repeat", [["none", "Never"], ["weekly", "Every week"], ["monthly", "Every month"], ["yearly", "Every year"]], ev.repeat ?? "none")}</label>
     <label>Who sees it ${sel("visibility", [["gm", "Only the GM"], ["all", "Everyone"], ["users", "Named players"]], ev.visibility ?? "gm")}</label></div>
-    <div class="users">${users.map((u) => `<label class="check"><input type="checkbox" name="users" value="${u.id}"${(ev.users ?? []).includes(u.id) ? " checked" : ""}> ${esc(u.name)}</label>`).join("") || "<span class='hint'>No player users yet.</span>"}</div>
+    <div class="users">${users.map((u) => `<label class="check"><input type="checkbox" name="users" value="${u.id}"${(ev.users ?? []).includes(u.id) ? " checked" : ""}> ${esc(u.name)}<input class="per" type="number" min="0" step="1" name="amount-${u.id}" value="${ev.amounts?.[u.id] ?? ""}" placeholder="eb" title="Amount for this player; blank uses the shared amount"></label>`).join("") || "<span class='hint'>No player users yet.</span>"}</div>
     <fieldset class="effect"><legend>When the day comes</legend>
       <label>What happens ${sel("effect", Object.entries(EFFECT_LABELS), ev.effect ?? "none")}</label>
       <div class="row eddies"><label>Eddies<input name="amount" type="number" min="0" step="1" value="${ev.amount ?? 0}"></label><label>Ledger reason<input name="reason" value="${esc(ev.reason)}" placeholder="Rent, September 2045"></label></div>
@@ -208,6 +208,7 @@ async function eventDialog(ev = {}) {
   const read = (html) => normalizeEvent({id: ev.id, title: html.find('[name=title]').val(), start: html.find('[name=start]').val(), end: html.find('[name=end]').val(),
     repeat: html.find('[name=repeat]').val(), visibility: html.find('[name=visibility]').val(), users: html.find('[name=users]:checked').map((i, el) => el.value).get(), notes: html.find('[name=notes]').val(),
     effect: html.find('[name=effect]').val(), amount: html.find('[name=amount]').val(), reason: html.find('[name=reason]').val(),
+    amounts: Object.fromEntries(html.find('.users .per').map((i, el) => [[el.name.replace("amount-", ""), el.value]]).get()),
     items: html.find('.item-list li').map((i, li) => ({uuid: li.dataset.uuid, name: li.querySelector("span").textContent, qty: li.querySelector(".qty").value})).get()});
   const buttons = {
     save: {icon: '<i class="fas fa-check"></i>', label: "Save", callback: async (html) => {
@@ -227,6 +228,7 @@ async function eventDialog(ev = {}) {
         html.find(".users").toggle(html.find('[name=visibility]').val() === "users");
         const effect = html.find('[name=effect]').val();
         html.find(".eddies").toggle(["pay", "ask", "credit"].includes(effect)); html.find(".items").toggle(effect === "items");
+        html.find(".users .per").toggle(["pay", "credit"].includes(effect));
         html.find(".effect").toggleClass("blocked", effect !== "none" && html.find('[name=visibility]').val() === "gm");
       };
       html.find('[name=visibility], [name=effect]').on("change", sync); sync();
