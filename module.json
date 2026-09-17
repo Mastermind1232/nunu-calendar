@@ -2,7 +2,7 @@
   "id": "nunu-calendar",
   "title": "NuNu Calendar",
   "description": "The NuNu campaign clock: an in-world date in the corner, a month grid, and events only the right eyes can see.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "authors": [{"name": "Adam Meehan"}],
   "compatibility": {"minimum": "12", "verified": "12", "maximum": "12"},
   "esmodules": ["scripts/main.mjs"],
