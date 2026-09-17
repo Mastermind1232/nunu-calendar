@@ -1,0 +1,13 @@
+{
+  "id": "nunu-calendar",
+  "title": "NuNu Calendar",
+  "description": "The NuNu campaign clock: an in-world date in the corner, a month grid, and events only the right eyes can see.",
+  "version": "1.0.0",
+  "authors": [{"name": "Adam Meehan"}],
+  "compatibility": {"minimum": "12", "verified": "12", "maximum": "12"},
+  "esmodules": ["scripts/main.mjs"],
+  "styles": ["styles/calendar.css"],
+  "relationships": {"systems": [{"id": "cyberpunk-red-core", "type": "system"}]},
+  "manifest": "https://assets.forge-vtt.com/6a7ca306f6a96908b438164c/modules/nunu-calendar/module.json",
+  "download": "https://assets.forge-vtt.com/6a7ca306f6a96908b438164c/modules/nunu-calendar/module.zip"
+}

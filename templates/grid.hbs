@@ -1,0 +1,13 @@
+<div class="nunu-cal-head">
+  <button type="button" data-nav="-1" title="Previous month"><i class="fas fa-chevron-left"></i></button>
+  <h2>{{month}} {{year}}</h2>
+  <button type="button" data-nav="1" title="Next month"><i class="fas fa-chevron-right"></i></button>
+  <button type="button" class="today" data-today title="Jump to today"><i class="fas fa-location-crosshairs"></i> {{today}}</button>
+</div>
+<div class="nunu-cal-grid">
+  {{#each weekdays}}<div class="wd">{{this}}</div>{{/each}}
+  {{#each cells}}{{#if this}}<div class="day{{#if today}} today{{/if}}"{{#if ../gm}} data-add="{{key}}" title="Add an event on this day"{{/if}}><span class="num">{{d}}</span>
+    {{#each events}}<div class="ev{{#if gm}} gm{{/if}}{{#if named}} named{{/if}}{{#if range}} range{{/if}}"{{#if ../../gm}} data-edit="{{id}}"{{/if}} title="{{notes}}">{{title}}</div>{{/each}}
+  </div>{{else}}<div class="day blank"></div>{{/if}}{{/each}}
+</div>
+{{#if gm}}<p class="hint">Click a day to add an event, click an event to edit it. Grey is GM-only, striped is for named players, colour is everyone.</p>{{/if}}
