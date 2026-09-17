@@ -31,6 +31,9 @@ export const shortDate = (date) => `${WEEKDAYS[weekday(date)].slice(0, 3)} ${dat
 
 /* Events: {id, title, start:"YYYY-MM-DD", end:"YYYY-MM-DD"|"", repeat:"none"|"weekly"|"monthly"|"yearly", visibility:"gm"|"all"|"users", users:[], notes:""} */
 export const REPEATS = ["none", "weekly", "monthly", "yearly"];
+/** What an event does to the people it applies to when its day arrives. */
+export const EFFECTS = ["none", "pay", "ask", "credit", "items"];
+export const EFFECT_LABELS = {none: "Nothing", pay: "They pay a set amount", ask: "They choose how much to pay", credit: "They receive eddies", items: "They receive items"};
 export function normalizeEvent(raw = {}) {
   const start = parse(raw.start) ? raw.start.trim() : null;
   if (!start) throw new Error("An event needs a start date, written YYYY-MM-DD.");
@@ -41,7 +44,14 @@ export function normalizeEvent(raw = {}) {
   const repeat = REPEATS.includes(raw.repeat) ? raw.repeat : "none";
   const visibility = ["gm", "all", "users"].includes(raw.visibility) ? raw.visibility : "gm";
   const users = visibility === "users" ? [...new Set((raw.users ?? []).map(String).filter(Boolean))] : [];
-  return {id: String(raw.id || ""), title: title.slice(0, 120), start, end, repeat, visibility, users, notes: String(raw.notes ?? "").slice(0, 2000)};
+  const effect = EFFECTS.includes(raw.effect) ? raw.effect : "none";
+  const amount = Math.max(0, Math.floor(Number(raw.amount) || 0));
+  const items = effect === "items" ? (raw.items ?? []).filter((i) => i && i.uuid).map((i) => ({uuid: String(i.uuid), name: String(i.name ?? "Item").slice(0, 120), qty: Math.max(1, Math.floor(Number(i.qty) || 1))})) : [];
+  if (effect !== "none" && visibility === "gm") throw new Error("A GM-only event cannot charge, pay or hand out anything. Set who it applies to.");
+  if ((effect === "pay" || effect === "credit") && amount <= 0) throw new Error("Enter the amount of eddies.");
+  if (effect === "items" && !items.length) throw new Error("Drop at least one item onto the event.");
+  return {id: String(raw.id || ""), title: title.slice(0, 120), start, end, repeat, visibility, users, notes: String(raw.notes ?? "").slice(0, 2000),
+    effect, amount, reason: String(raw.reason ?? "").trim().slice(0, 200), items};
 }
 /** Does the event land on this day? Repeats are single-day; ranges do not repeat. */
 export function occursOn(ev, date) {
@@ -72,3 +82,49 @@ export function monthCells(y, m) {
 export const SEED_EVENTS = [
   {id: "rent", title: "Rent and lifestyle due", start: "2045-09-28", end: "", repeat: "monthly", visibility: "all", users: [], notes: "Housing and food for the month, from the Economic Tables."},
 ];
+
+/* ---------------- Due records: what lands on whom when a day arrives ---------------- */
+/** Every day after `from` up to and including `to`. Empty when going backward. */
+export function daysBetween(from, to) {
+  const out = [];
+  for (let d = addDays(from, 1); compare(d, to) <= 0; d = addDays(d, 1)) out.push(d);
+  return out;
+}
+/** The users an event applies to, from the player users given as [{id}]. */
+export const affectedUsers = (ev, users) => ev.effect === "none" ? [] : users.filter((u) => ev.visibility === "all" || (ev.visibility === "users" && ev.users.includes(String(u.id))));
+export function dueOn(events, date, users) {
+  const records = [];
+  for (const ev of events) {
+    if (ev.effect === "none" || !occursOn(ev, date)) continue;
+    for (const u of affectedUsers(ev, users)) {
+      records.push({id: `${ev.id}:${key(date)}:${u.id}`, userId: String(u.id), kind: ev.effect, eventId: ev.id, title: ev.title, date: key(date),
+        amount: ev.amount, reason: ev.reason || ev.title, items: ev.items});
+    }
+  }
+  return records;
+}
+export const downtimeRecords = (date, users) => users.map((u) => ({id: `downtime:${key(date)}:${u.id}`, userId: String(u.id), kind: "downtime", date: key(date), title: "A week passes"}));
+/** Adds records to a queue without duplicating ids. */
+export const mergeQueue = (queue, records) => { const seen = new Set(queue.map((r) => r.id)); return [...queue, ...records.filter((r) => !seen.has(r.id))]; };
+
+/* ---------------- Hustles (Cyberpunk RED core, downtime) ---------------- */
+/** Payout bands by Role rank 1-4, 5-7, 8-10. `bands` indexes PAY for d6 results 1-6. Flavor text is a placeholder until the book's wording is loaded. */
+export const PAY = [[0, 100, 300], [100, 200, 500], [200, 300, 600], [300, 500, 800]];
+export const HUSTLES = {
+  rockerboy: {name: "Rockerboy", bands: [2, 0, 3, 3, 3, 2], text: ["played a small local show", "found no bookings this week", "played a private headline gig for a rich client", "recorded and released a Data Pool download", "opened for a bigger act", "played a private party for a fee"]},
+  solo: {name: "Solo", bands: [1, 2, 2, 1, 0, 1], text: ["took a budget protection contract", "took a premium protection contract", "took a high-risk contract", "hired out as muscle", "laid low all week", "took an enforcement contract"]},
+  netrunner: {name: "Netrunner", bands: [1, 2, 0, 2, 2, 2], text: ["sold a small batch of data", "sold corporate data", "had an unproductive week", "recovered lost data for a client", "collected a ransomware payoff", "was paid to sabotage a network"]},
+  tech: {name: "Tech", bands: [0, 1, 2, 1, 1, 1], text: ["found no commissions", "restored some salvage", "took a security contract", "serviced someone's cybertech", "serviced weapons", "took a sabotage commission"]},
+  medtech: {name: "Medtech", bands: [1, 2, 1, 0, 2, 1], text: ["handled an emergency treatment", "sold a recovered implant", "assisted Trauma Team", "gave unpaid care to the community", "did a procedure for a wealthy patient", "filled a pharmaceutical order"]},
+  media: {name: "Media", bands: [3, 2, 2, 2, 0, 3], text: ["sold an investigative piece", "ran a popular feature", "wrote advertising copy", "filed a controversial report", "found no usable leads", "broke a major revelation"]},
+  lawman: {name: "Lawman", bands: [1, 2, 0, 1, 2, 2], text: ["made routine arrests", "collected a citizen's reward", "took a salary deduction", "drew a routine paycheck", "earned a smuggling-bust bonus", "earned a gang-seizure bonus"]},
+  exec: {name: "Exec", bands: [3, 0, 2, 3, 3, 2], text: ["earned a project bonus", "had a bonus withheld", "drew a routine paycheck", "leveraged the office", "was rewarded for a major project", "reallocated a rival's funding"]},
+  fixer: {name: "Fixer", bands: [2, 2, 2, 0, 2, 3], text: ["brokered information", "took a booking commission", "took a sourcing commission", "watched a deal fall through", "took a job-placement fee", "brokered rare goods"]},
+  nomad: {name: "Nomad", bands: [1, 1, 1, 2, 1, 0], text: ["ran cargo", "ran convoy security", "made a small smuggling run", "made a major smuggling run", "delivered passengers", "found no transport work"]},
+};
+export const ROLE_BY_ABILITY = {operator: "fixer", medicine: "medtech", "charismatic impact": "rockerboy", backup: "lawman", credibility: "media", "combat awareness": "solo", maker: "tech", interface: "netrunner", moto: "nomad", teamwork: "exec"};
+export function hustleResult(table, rank, die) {
+  const t = HUSTLES[table];
+  if (!t || !Number.isInteger(rank) || rank < 1 || rank > 10 || !Number.isInteger(die) || die < 1 || die > 6) throw new Error("A Hustle needs a supported Role, a rank from 1 to 10 and a d6.");
+  return {die, amount: PAY[t.bands[die - 1]][rank >= 8 ? 2 : rank >= 5 ? 1 : 0], text: t.text[die - 1], role: t.name};
+}

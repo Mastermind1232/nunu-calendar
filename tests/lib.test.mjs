@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {addDays, weekday, daysInMonth, ordinal, longDate, shortDate, parse, key, normalizeEvent, occursOn, canSee, eventsOn, monthCells, WEEKDAYS} from "../scripts/lib.mjs";
+import {addDays, weekday, daysInMonth, ordinal, longDate, shortDate, parse, key, normalizeEvent, occursOn, canSee, eventsOn, monthCells, WEEKDAYS, daysBetween, dueOn, downtimeRecords, mergeQueue, hustleResult, HUSTLES} from "../scripts/lib.mjs";
 
 test("date arithmetic crosses months and years", () => {
   assert.deepEqual(addDays({y: 2045, m: 9, d: 28}, 7), {y: 2045, m: 10, d: 5});
@@ -55,4 +55,38 @@ test("month grid pads to whole weeks starting Sunday", () => {
   assert.equal(cells.length % 7, 0);
   assert.equal(cells.findIndex((c) => c), weekday({y: 2045, m: 9, d: 1}));
   assert.equal(cells.filter(Boolean).length, 30);
+});
+
+test("consequences validate: need a target, an amount or items", () => {
+  assert.throws(() => normalizeEvent({title: "Rent", start: "2045-09-28", effect: "pay", amount: 1000}), /GM-only/);
+  assert.throws(() => normalizeEvent({title: "Rent", start: "2045-09-28", visibility: "all", effect: "pay"}), /amount/);
+  assert.throws(() => normalizeEvent({title: "Drop", start: "2045-09-02", visibility: "users", users: ["jan"], effect: "items"}), /item/);
+  const rent = normalizeEvent({title: "Rent", start: "2045-09-28", repeat: "monthly", visibility: "all", effect: "pay", amount: "1100.7", reason: "Rent"});
+  assert.equal(rent.amount, 1100); assert.equal(rent.effect, "pay");
+  const drop = normalizeEvent({title: "Drop", start: "2045-09-02", visibility: "users", users: ["jan"], effect: "items", items: [{uuid: "Item.abc", name: "Pharma", qty: "3"}]});
+  assert.deepEqual(drop.items, [{uuid: "Item.abc", name: "Pharma", qty: 3}]);
+  assert.equal(normalizeEvent({title: "x", start: "2045-09-02"}).effect, "none");
+});
+test("due records land on the right people on the right days", () => {
+  const users = [{id: "u1"}, {id: "u2"}];
+  const rent = normalizeEvent({id: "rent", title: "Rent", start: "2045-09-28", repeat: "monthly", visibility: "all", effect: "pay", amount: 1000});
+  const jan = normalizeEvent({id: "mole", title: "Pay the mole", start: "2045-09-01", repeat: "monthly", visibility: "users", users: ["u1"], effect: "ask"});
+  const quiet = normalizeEvent({id: "q", title: "Ambush", start: "2045-09-28"});
+  const days = daysBetween({y: 2045, m: 9, d: 27}, {y: 2045, m: 10, d: 2});
+  assert.equal(days.length, 5);
+  const due = days.flatMap((d) => dueOn([rent, jan, quiet], d, users));
+  assert.deepEqual(due.map((r) => r.id), ["rent:2045-09-28:u1", "rent:2045-09-28:u2", "mole:2045-10-01:u1"]);
+  assert.equal(due[2].kind, "ask"); assert.equal(due[0].amount, 1000);
+  assert.deepEqual(daysBetween({y: 2045, m: 9, d: 5}, {y: 2045, m: 9, d: 4}), [], "going backward triggers nothing");
+  assert.equal(mergeQueue(due, due).length, 3, "no duplicates");
+  assert.deepEqual(downtimeRecords({y: 2045, m: 9, d: 20}, users).map((r) => r.kind), ["downtime", "downtime"]);
+});
+test("hustle payouts follow the rank bands", () => {
+  assert.equal(hustleResult("rockerboy", 4, 2).amount, 0);
+  assert.equal(hustleResult("rockerboy", 5, 3).amount, 500);
+  assert.equal(hustleResult("rockerboy", 8, 1).amount, 600);
+  assert.equal(hustleResult("fixer", 4, 4).amount, 0);
+  assert.equal(Object.keys(HUSTLES).length, 10);
+  for (const t of Object.values(HUSTLES)) { assert.equal(t.bands.length, 6); assert.equal(t.text.length, 6); }
+  assert.throws(() => hustleResult("rockerboy", 11, 1));
 });

@@ -31,3 +31,15 @@
 .nunu-cal-form .users label.check{display:flex;align-items:center;gap:6px;margin:0;font-weight:normal}
 .nunu-cal-form .users input{width:auto;display:inline;margin:0}
 .nunu-cal-chat{font-style:italic}
+
+.nunu-cal-form fieldset.effect{border:1px solid #bbb;border-radius:3px;padding:6px 10px 10px;margin:10px 0 0}
+.nunu-cal-form fieldset.effect legend{font-weight:bold;padding:0 4px}
+.nunu-cal-form fieldset.effect.blocked{border-color:#c62828}
+.nunu-cal-form .items{margin-top:6px;padding:8px;border:2px dashed #999;border-radius:3px;min-height:44px}
+.nunu-cal-form .item-list{list-style:none;margin:6px 0 0;padding:0}.nunu-cal-form .item-list li{display:flex;align-items:center;gap:6px;margin:3px 0}
+.nunu-cal-form .item-list .qty{width:60px;display:inline;margin:0}.nunu-cal-form .item-list .remove{cursor:pointer;color:#8b1e1e}
+.nunu-cal-dialog .nunu-cal-prompt h3{margin:0 0 6px;border:0}.nunu-cal-dialog .when{font-size:11px;color:#666;margin:0 0 4px}
+.nunu-cal-dialog .nunu-cal-prompt label{display:block;font-weight:bold;margin-top:8px}.nunu-cal-dialog .nunu-cal-prompt input,.nunu-cal-dialog .nunu-cal-prompt select{display:block;width:100%;margin-top:4px}
+.nunu-cal-dialog button[data-button="pay"],.nunu-cal-dialog button[data-button="rest"]{background:#1f7a3a;color:#fff;border-color:#2f9a4a}
+.nunu-cal-dialog button[data-button="skip"]{background:#8b1e1e;color:#fff;border-color:#b12a2a}
+.nunu-cal-dialog button[data-button="hustle"]{background:#26394e;color:#fff;border-color:#667e99}

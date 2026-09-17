@@ -1,4 +1,6 @@
-import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells} from "./lib.mjs";
+import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, EFFECT_LABELS, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells, daysBetween, dueOn, downtimeRecords, mergeQueue, hustleResult, HUSTLES, ROLE_BY_ABILITY} from "./lib.mjs";
+
+const SOCKET = `module.${ID}`;
 
 /* ------------------------------------------------------------------ */
 /*  State: two world settings, the date and the event list             */
@@ -10,7 +12,10 @@ async function saveEvents(list) { await game.settings.set(ID, "events", list); }
 export async function setDate(date, announce = "") {
   if (!game.user.isGM) throw new Error("Only the GM moves the calendar.");
   if (!isDate(date)) throw new Error("That is not a valid date.");
+  const before = getDate();
   await game.settings.set(ID, "date", date);
+  const due = daysBetween(before, date).flatMap((d) => dueOn(getEvents(), d, playerUsers()));
+  if (due.length) await enqueue(due);
   if (announce) await ChatMessage.create({content: `<div class="nunu-cal-chat"><i class="fas fa-calendar-days"></i> ${announce}</div>`, speaker: {alias: "Calendar"}});
   Hooks.callAll("nunuCalendar.dateChanged", date);
   return date;
@@ -19,14 +24,115 @@ export async function setDate(date, announce = "") {
 export async function advance(days) {
   const next = addDays(getDate(), days);
   await setDate(next, days === 7 ? `A week passes. It is now ${longDate(next)}.` : "");
-  if (days === 7) Hooks.callAll("nunuCalendar.weekPassed", next);
+  if (days === 7) { await enqueue(downtimeRecords(next, playerUsers())); Hooks.callAll("nunuCalendar.weekPassed", next); }
   return next;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The queue: things owed to players, kept until they answer          */
+/* ------------------------------------------------------------------ */
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+export const playerUsers = () => game.users.filter((u) => !u.isGM && u.character).map((u) => ({id: u.id, name: u.name}));
+const getQueue = () => game.settings.get(ID, "queue") ?? [];
+async function enqueue(records) { await game.settings.set(ID, "queue", mergeQueue(getQueue(), records)); }
+async function dequeue(id) { await game.settings.set(ID, "queue", getQueue().filter((r) => r.id !== id)); }
+const activeGM = () => game.users.filter((u) => u.isGM && u.active).sort((a, b) => a.id.localeCompare(b.id))[0];
+const whisper = (content, userIds) => ChatMessage.create({content, whisper: userIds, speaker: {alias: "Calendar"}});
+
+function moneyUpdate(actor, delta, reason) {
+  const w = actor.system.wealth;
+  if (!Number.isSafeInteger(w?.value) || !Array.isArray(w.transactions)) throw new Error(`${actor.name} has no Eurobucks ledger.`);
+  const value = w.value + delta;
+  if (value < 0) throw new Error(`${actor.name} has ${w.value}eb, not enough for ${-delta}eb.`);
+  return {"system.wealth.value": value, "system.wealth.transactions": [...w.transactions.map((r) => [...r]), [`${delta >= 0 ? "Increased" : "Decreased"} wealth by ${Math.abs(delta)} to ${value}.`, reason]]};
+}
+function actorRoles(actor) {
+  return actor.items.filter((i) => i.type === "role").map((i) => {
+    const byName = String(i.name).trim().toLowerCase(), key = HUSTLES[byName] ? byName : ROLE_BY_ABILITY[String(i.system?.mainRoleAbility ?? "").trim().toLowerCase()];
+    return key ? {id: i.id, key, name: i.name, rank: Number(i.system?.rank) || 0} : null;
+  }).filter((r) => r && r.rank >= 1);
+}
+
+/** Runs on the GM's client when a player answers a popup. Applies the result to their character, then clears the record. */
+async function resolve(msg, user) {
+  const rec = getQueue().find((r) => r.id === msg.id && r.userId === user.id);
+  if (!rec) return;
+  const actor = user.character;
+  if (!actor) throw new Error(`${user.name} has no assigned character.`);
+  const gmIds = game.users.filter((u) => u.isGM).map((u) => u.id);
+  const receipt = (text) => whisper(`<div class="nunu-cal-chat"><i class="fas fa-calendar-days"></i> ${text}</div>`, [...gmIds, user.id]);
+  if (rec.kind === "pay" || rec.kind === "ask") {
+    const amount = rec.kind === "ask" ? Math.max(0, Math.floor(Number(msg.amount) || 0)) : rec.amount;
+    if (msg.choice !== "pay" || amount <= 0) { await receipt(`<b>${esc(actor.name)}</b> did not pay for ${esc(rec.title)}.`); }
+    else { await actor.update(moneyUpdate(actor, -amount, `${rec.reason} (${rec.date})`)); await receipt(`<b>${esc(actor.name)}</b> paid ${amount}eb: ${esc(rec.reason)}.`); }
+  } else if (rec.kind === "credit") {
+    await actor.update(moneyUpdate(actor, rec.amount, `${rec.reason} (${rec.date})`));
+    await receipt(`<b>${esc(actor.name)}</b> received ${rec.amount}eb: ${esc(rec.reason)}.`);
+  } else if (rec.kind === "items") {
+    const docs = [];
+    for (const it of rec.items) {
+      const src = await fromUuid(it.uuid).catch(() => null);
+      if (!src) throw new Error(`Item not found: ${it.name}. Fix the event's items.`);
+      const data = src.toObject(); delete data._id; if (data.system && "amount" in data.system) data.system.amount = it.qty;
+      docs.push(data);
+    }
+    await actor.createEmbeddedDocuments("Item", docs);
+    await receipt(`<b>${esc(actor.name)}</b> received ${rec.items.map((i) => `${i.qty > 1 ? `${i.qty}× ` : ""}${esc(i.name)}`).join(", ")}: ${esc(rec.reason)}.`);
+  } else if (rec.kind === "downtime") {
+    if (msg.choice === "rest") {
+      const body = actor.system.stats.body.value, hp = actor.system.derivedStats.hp;
+      const healed = Math.max(0, Math.min(body * 7, hp.max - hp.value));
+      if (healed) await actor.update({"system.derivedStats.hp.value": hp.value + healed});
+      await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> chose to rest for the week.${healed ? ` Recovered ${healed} HP.` : ""}</div>`, speaker: {alias: "Calendar"}});
+    } else {
+      const role = actorRoles(actor).find((r) => r.id === msg.roleId) ?? actorRoles(actor)[0];
+      if (!role) throw new Error(`${actor.name} has no Role with a rank to hustle with.`);
+      const roll = await new Roll("1d6").evaluate();
+      const result = hustleResult(role.key, Math.min(10, role.rank), Number(roll.total));
+      await roll.toMessage({speaker: ChatMessage.getSpeaker({actor}), flavor: `Hustle: ${role.name} rank ${role.rank}`});
+      if (result.amount) await actor.update(moneyUpdate(actor, result.amount, `Hustle, ${role.name}: ${result.text}`));
+      await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> chose to hustle this week. They ${esc(result.text)}${result.amount ? ` and earned <b>${result.amount}eb</b>` : " and earned nothing"}.</div>`, speaker: {alias: "Calendar"}});
+    }
+  }
+  await dequeue(rec.id);
+}
+
+/* Player side: show one pending popup at a time, only while a GM is online to apply it. */
+const shown = new Set();
+function showPending() {
+  if (!game.ready || game.user.isGM) return;
+  const rec = getQueue().find((r) => r.userId === game.user.id && !shown.has(r.id));
+  if (!rec) return;
+  if (!activeGM()) { ui.notifications.info("The calendar has something for you. It will appear when the GM is online."); return; }
+  shown.add(rec.id);
+  const send = (extra) => { game.socket.emit(SOCKET, {type: "resolve", id: rec.id, userId: game.user.id, ...extra}); };
+  const wrap = (body) => `<div class="nunu-cal-prompt"><p class="when">${esc(rec.date)}</p>${body}</div>`;
+  let content, buttons;
+  if (rec.kind === "pay") {
+    content = wrap(`<h3>${esc(rec.title)}</h3><p>Pay <b>${rec.amount}eb</b>? ${esc(rec.reason)}</p>`);
+    buttons = {pay: {label: `Pay ${rec.amount}eb`, callback: () => send({choice: "pay"})}, skip: {label: "Don't pay", callback: () => send({choice: "skip"})}};
+  } else if (rec.kind === "ask") {
+    content = wrap(`<h3>${esc(rec.title)}</h3><p>${esc(rec.reason)}</p><label>How much do you pay?<input name="amount" type="number" min="0" step="1" value="${rec.amount || 0}"></label>`);
+    buttons = {pay: {label: "Pay", callback: (html) => send({choice: "pay", amount: Number(html.find('[name=amount]').val())})}, skip: {label: "Don't pay", callback: () => send({choice: "skip"})}};
+  } else if (rec.kind === "credit") {
+    content = wrap(`<h3>${esc(rec.title)}</h3><p>You receive <b>${rec.amount}eb</b>. ${esc(rec.reason)}</p>`);
+    buttons = {pay: {label: "Collect", callback: () => send({choice: "collect"})}};
+  } else if (rec.kind === "items") {
+    content = wrap(`<h3>${esc(rec.title)}</h3><p>${esc(rec.reason)}</p><ul>${rec.items.map((i) => `<li>${i.qty > 1 ? `${i.qty}× ` : ""}${esc(i.name)}</li>`).join("")}</ul>`);
+    buttons = {pay: {label: "Collect", callback: () => send({choice: "collect"})}};
+  } else if (rec.kind === "downtime") {
+    const roles = game.user.character ? actorRoles(game.user.character) : [];
+    const pick = roles.length > 1 ? `<label>Hustle as<select name="role">${roles.map((r) => `<option value="${r.id}">${esc(r.name)} · rank ${r.rank}</option>`).join("")}</select></label>` : "";
+    content = wrap(`<h3>A week passes</h3><p><b>Rest up:</b> recover HP equal to your BODY for each of the seven days.</p><p><b>Hustle:</b> roll on your Role's Hustle table and earn what the week brings.</p>${pick}`);
+    buttons = {rest: {icon: '<i class="fas fa-bed"></i>', label: "Rest up", callback: () => send({choice: "rest"})},
+      hustle: {icon: '<i class="fas fa-coins"></i>', label: "Hustle", callback: (html) => send({choice: "hustle", roleId: html.find('[name=role]').val() ?? roles[0]?.id})}};
+  } else { shown.delete(rec.id); return; }
+  new Dialog({title: rec.kind === "downtime" ? "Downtime" : "The Calendar", content, buttons, close: () => { shown.delete(rec.id); }}, {classes: ["dialog", "nunu-cal-dialog"], width: 440}).render(true);
 }
 
 /* ------------------------------------------------------------------ */
 /*  The corner widget, sitting just above the player list              */
 /* ------------------------------------------------------------------ */
-const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 function renderWidget() {
   if (!game.ready) return;
   const date = getDate(), gm = game.user.isGM;
@@ -92,10 +198,17 @@ async function eventDialog(ev = {}) {
     <div class="row"><label>Repeats ${sel("repeat", [["none", "Never"], ["weekly", "Every week"], ["monthly", "Every month"], ["yearly", "Every year"]], ev.repeat ?? "none")}</label>
     <label>Who sees it ${sel("visibility", [["gm", "Only the GM"], ["all", "Everyone"], ["users", "Named players"]], ev.visibility ?? "gm")}</label></div>
     <div class="users">${users.map((u) => `<label class="check"><input type="checkbox" name="users" value="${u.id}"${(ev.users ?? []).includes(u.id) ? " checked" : ""}> ${esc(u.name)}</label>`).join("") || "<span class='hint'>No player users yet.</span>"}</div>
+    <fieldset class="effect"><legend>When the day comes</legend>
+      <label>What happens ${sel("effect", Object.entries(EFFECT_LABELS), ev.effect ?? "none")}</label>
+      <div class="row eddies"><label>Eddies<input name="amount" type="number" min="0" step="1" value="${ev.amount ?? 0}"></label><label>Ledger reason<input name="reason" value="${esc(ev.reason)}" placeholder="Rent, September 2045"></label></div>
+      <div class="items"><p class="hint">Drag items here from the Items tab or a compendium.</p><ul class="item-list">${(ev.items ?? []).map((i) => `<li data-uuid="${esc(i.uuid)}"><span>${esc(i.name)}</span> × <input type="number" min="1" step="1" value="${i.qty}" class="qty"> <a class="remove" title="Remove"><i class="fas fa-times"></i></a></li>`).join("")}</ul></div>
+    </fieldset>
     <label>Notes<textarea name="notes" rows="3">${esc(ev.notes)}</textarea></label>
   </form>`;
   const read = (html) => normalizeEvent({id: ev.id, title: html.find('[name=title]').val(), start: html.find('[name=start]').val(), end: html.find('[name=end]').val(),
-    repeat: html.find('[name=repeat]').val(), visibility: html.find('[name=visibility]').val(), users: html.find('[name=users]:checked').map((i, el) => el.value).get(), notes: html.find('[name=notes]').val()});
+    repeat: html.find('[name=repeat]').val(), visibility: html.find('[name=visibility]').val(), users: html.find('[name=users]:checked').map((i, el) => el.value).get(), notes: html.find('[name=notes]').val(),
+    effect: html.find('[name=effect]').val(), amount: html.find('[name=amount]').val(), reason: html.find('[name=reason]').val(),
+    items: html.find('.item-list li').map((i, li) => ({uuid: li.dataset.uuid, name: li.querySelector("span").textContent, qty: li.querySelector(".qty").value})).get()});
   const buttons = {
     save: {icon: '<i class="fas fa-check"></i>', label: "Save", callback: async (html) => {
       const data = read(html); const list = getEvents();
@@ -110,9 +223,25 @@ async function eventDialog(ev = {}) {
   }};
   return new Promise((resolve) => new Dialog({title: ev.id ? "Edit event" : "Add event", content, buttons, default: "save", close: () => resolve(),
     render: (html) => {
-      const sync = () => html.find(".users").toggle(html.find('[name=visibility]').val() === "users");
-      html.find('[name=visibility]').on("change", sync); sync();
-    }}, {width: 520}).render(true));
+      const sync = () => {
+        html.find(".users").toggle(html.find('[name=visibility]').val() === "users");
+        const effect = html.find('[name=effect]').val();
+        html.find(".eddies").toggle(["pay", "ask", "credit"].includes(effect)); html.find(".items").toggle(effect === "items");
+        html.find(".effect").toggleClass("blocked", effect !== "none" && html.find('[name=visibility]').val() === "gm");
+      };
+      html.find('[name=visibility], [name=effect]').on("change", sync); sync();
+      html.find(".items").on("click", ".remove", (e) => e.currentTarget.closest("li").remove());
+      const zone = html.find(".items")[0];
+      zone.addEventListener("dragover", (e) => e.preventDefault());
+      zone.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        const data = TextEditor.getDragEventData(e);
+        if (data?.type !== "Item" || !data.uuid) return ui.notifications.warn("Drop an item.");
+        const item = await fromUuid(data.uuid).catch(() => null);
+        if (!item) return ui.notifications.warn("That item could not be read.");
+        html.find(".item-list").append(`<li data-uuid="${esc(item.uuid)}"><span>${esc(item.name)}</span> × <input type="number" min="1" step="1" value="1" class="qty"> <a class="remove" title="Remove"><i class="fas fa-times"></i></a></li>`);
+      });
+    }}, {width: 560}).render(true));
 }
 
 /* ------------------------------------------------------------------ */
@@ -122,6 +251,7 @@ Hooks.once("init", () => {
   game.settings.register(ID, "date", {scope: "world", config: false, type: Object, default: DEFAULT_DATE, onChange: () => { renderWidget(); CalendarApp.refresh(); }});
   game.settings.register(ID, "events", {scope: "world", config: false, type: Object, default: [], onChange: () => CalendarApp.refresh()});
   game.settings.register(ID, "seeded", {scope: "world", config: false, type: Boolean, default: false});
+  game.settings.register(ID, "queue", {scope: "world", config: false, type: Object, default: [], onChange: () => showPending()});
   loadTemplates([`modules/${ID}/templates/grid.hbs`]);
 });
 Hooks.once("ready", async () => {
@@ -129,7 +259,17 @@ Hooks.once("ready", async () => {
     if (!(game.settings.get(ID, "events") ?? []).length) await saveEvents(SEED_EVENTS);
     await game.settings.set(ID, "seeded", true);
   }
-  game.modules.get(ID).api = {getDate, setDate, advance, getEvents, longDate, shortDate, parse, open: CalendarApp.open};
+  game.modules.get(ID).api = {getDate, setDate, advance, getEvents, getQueue, longDate, shortDate, parse, open: CalendarApp.open};
+  game.socket.on(SOCKET, async (msg) => {
+    if (msg?.type === "reply") { if (msg.userId === game.user.id) { ui.notifications.warn(msg.text, {permanent: true}); shown.delete(msg.id); } return; }
+    if (msg?.type !== "resolve" || activeGM()?.id !== game.user.id) return;
+    const user = game.users.get(msg.userId);
+    if (!user) return;
+    try { await resolve(msg, user); }
+    catch (e) { ui.notifications.error(`${user.name}: ${e.message}`); game.socket.emit(SOCKET, {type: "reply", userId: user.id, id: msg.id, text: e.message}); }
+  });
   renderWidget();
+  showPending();
 });
+Hooks.on("userConnected", () => showPending());
 Hooks.on("renderPlayerList", () => renderWidget());
