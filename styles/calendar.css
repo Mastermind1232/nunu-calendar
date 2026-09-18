@@ -44,3 +44,11 @@
 .nunu-cal-dialog button[data-button="skip"]{background:#8b1e1e;color:#fff;border-color:#b12a2a}
 .nunu-cal-dialog button[data-button="hustle"]{background:#26394e;color:#fff;border-color:#667e99}
 .nunu-cal-form .users .per{width:80px;display:inline;margin:0 0 0 6px}
+
+/* The CPR system forces hint colours inside forms with !important. */
+.nunu-cal .hint{color:#bac8d9 !important}
+.nunu-cal-form .hint,.nunu-cal-form .notes{color:#555 !important}
+.nunu-cal .nunu-cal-head button{background:#26394e !important;color:#fff !important;border:1px solid #667e99 !important}
+#nunu-cal-widget .ctrl button{background:#26394e !important;color:#fff !important;border:1px solid #667e99 !important}
+#nunu-cal-widget .ctrl .week{background:#5a1f1f !important;border-color:#c62828 !important}
+#nunu-cal-widget .date{background:none !important;border:0 !important;color:#eee !important}
