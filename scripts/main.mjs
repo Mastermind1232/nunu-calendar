@@ -79,19 +79,28 @@ async function resolve(msg, user) {
     await actor.createEmbeddedDocuments("Item", docs);
     await receipt(`<b>${esc(actor.name)}</b> received ${rec.items.map((i) => `${i.qty > 1 ? `${i.qty}× ` : ""}${esc(i.name)}`).join(", ")}: ${esc(rec.reason)}.`);
   } else if (rec.kind === "downtime") {
+    const hqApi = game.modules.get("nunu-headquarters")?.api;
     if (msg.choice === "rest") {
+      const bonus = Number(hqApi?.healingBonus?.() ?? 0) || 0;
       const body = actor.system.stats.body.value, hp = actor.system.derivedStats.hp;
-      const healed = Math.max(0, Math.min(body * 7, hp.max - hp.value));
+      const healed = Math.max(0, Math.min((body + bonus) * 7, hp.max - hp.value));
       if (healed) await actor.update({"system.derivedStats.hp.value": hp.value + healed});
-      await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> chose to rest for the week.${healed ? ` Recovered ${healed} HP.` : ""}</div>`, speaker: {alias: "Calendar"}});
+      await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> chose to rest for the week.${healed ? ` Recovered ${healed} HP${bonus ? ` (BODY +${bonus} from the HQ)` : ""}.` : ""}</div>`, speaker: {alias: "Calendar"}});
     } else {
       const role = actorRoles(actor).find((r) => r.id === msg.roleId) ?? actorRoles(actor)[0];
       if (!role) throw new Error(`${actor.name} has no Role with a rank to hustle with.`);
-      const roll = await new Roll("1d6").evaluate();
-      const result = hustleResult(role.key, Math.min(10, role.rank), Number(roll.total));
-      await roll.toMessage({speaker: ChatMessage.getSpeaker({actor}), flavor: `Hustle: ${role.name} rank ${role.rank}`});
-      if (result.amount) await actor.update(moneyUpdate(actor, result.amount, `Hustle, ${role.name}: ${result.text}`));
-      await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> chose to hustle this week. They ${esc(result.text)}${result.amount ? ` and earned <b>${result.amount}eb</b>` : " and earned nothing"}.</div>`, speaker: {alias: "Calendar"}});
+      const mode = hqApi?.hustleMode?.() ?? "single";
+      const results = [];
+      for (let i = 0; i < (mode === "single" ? 1 : 2); i++) {
+        const roll = await new Roll("1d6").evaluate();
+        await roll.toMessage({speaker: ChatMessage.getSpeaker({actor}), flavor: `Hustle: ${role.name} rank ${role.rank}${mode === "single" ? "" : ` (roll ${i + 1}, HQ Morale Boost)`}`});
+        results.push(hustleResult(role.key, Math.min(10, role.rank), Number(roll.total)));
+      }
+      const kept = mode === "both" ? results : [results.reduce((a, b) => (b.amount > a.amount ? b : a))];
+      const amount = kept.reduce((n, r) => n + r.amount, 0);
+      if (amount) await actor.update(moneyUpdate(actor, amount, `Hustle, ${role.name}: ${kept.map((r) => r.text).join("; ")}`));
+      const story = kept.map((r) => esc(r.text)).join(", and ");
+      await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> chose to hustle this week. They ${story}${amount ? ` and earned <b>${amount}eb</b>` : " and earned nothing"}.</div>`, speaker: {alias: "Calendar"}});
     }
   }
   await dequeue(rec.id);
