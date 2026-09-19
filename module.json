@@ -2,7 +2,7 @@
   "id": "nunu-calendar",
   "title": "NuNu Calendar",
   "description": "The NuNu campaign clock: an in-world date in the corner, a month grid, and events only the right eyes can see.",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "authors": [
     {
       "name": "Adam Meehan"
@@ -28,7 +28,7 @@
     ]
   },
   "manifest": "https://raw.githubusercontent.com/Mastermind1232/nunu-calendar/main/module.json",
-  "download": "https://github.com/Mastermind1232/nunu-calendar/releases/download/v1.1.4/module.zip",
+  "download": "https://github.com/Mastermind1232/nunu-calendar/releases/download/v1.1.5/module.zip",
   "url": "https://github.com/Mastermind1232/nunu-calendar",
   "socket": true
 }

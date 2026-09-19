@@ -283,4 +283,15 @@ Hooks.once("ready", async () => {
   showPending();
 });
 Hooks.on("userConnected", () => showPending());
+
+/* Map pins on for everyone: Foundry stores "Display Notes" per client. Turn it on once per browser so nobody has to find the toggle. */
+Hooks.once("ready", async () => {
+  try {
+    const key = foundry.canvas?.layers?.NotesLayer?.TOGGLE_SETTING ?? globalThis.NotesLayer?.TOGGLE_SETTING ?? "notesDisplayToggle";
+    if (game.settings.settings.has(`core.${key}`) && !game.settings.get("core", key)) {
+      await game.settings.set("core", key, true);
+      if (canvas?.ready) canvas.notes?.draw?.();
+    }
+  } catch (e) { console.warn(`${ID} | could not turn on Display Notes`, e); }
+});
 Hooks.on("renderPlayerList", () => renderWidget());

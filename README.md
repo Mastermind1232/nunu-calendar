@@ -10,6 +10,7 @@ The NuNu campaign clock for Foundry VTT 12. Foundry owns "what day is it"; the v
 - **Rent and lifestyle due** is pre-loaded on the 28th, monthly, visible to everyone.
 - **Consequences.** An event can make something happen to the people it applies to when its day arrives: they pay a set amount (green Pay, red Don't pay; named players can each owe a different amount), they choose how much to pay (Jan and the mole), they receive eddies (Crane's stipend), or they receive items dropped onto the event. Popups wait until the player is online and a GM is there to apply them. Everything writes to the character sheet with a ledger line, and a receipt is whispered to the player and the GM.
 - **Downtime.** After +1 week every player picks Rest up (heal BODY per day for seven days) or Hustle (d6 on their Role's table at their rank, eddies to the sheet). The outcome is posted in chat. If NuNu Headquarters is active, its Medbay and Morale healing bonus is added to rest, and its Morale Boost Hustle mode (roll twice keep the better, or keep both) is applied.
+- **Map pins always on.** Turns Foundry's per-client "Display Notes" setting on for every user at login, so journal pins show on every scene without anyone finding the toggle.
 - **API** for other modules: `game.modules.get("nunu-calendar").api` has `getDate`, `setDate`, `advance`, `getEvents`, `longDate`, `open`. Hooks: `nunuCalendar.dateChanged` and `nunuCalendar.weekPassed`.
 
 Disable SmallTime; this takes its corner.
