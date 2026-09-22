@@ -142,16 +142,39 @@ function showPending() {
 /* ------------------------------------------------------------------ */
 /*  The corner widget, sitting just above the player list              */
 /* ------------------------------------------------------------------ */
+/* The Agent phone: a floating button beside the calendar that opens Virtual Agent, with its unread count. Only when that module is on. */
+function unreadTexts() {
+  const u = game.user.getFlag("VirtualAgent", "unreads") ?? {};
+  return Object.values(u).reduce((a, n) => a + (Number(n) > 0 ? Number(n) : 0), 0);
+}
+function renderPhone() {
+  const row = document.getElementById("nunu-cal-row");
+  if (!row) return;
+  let btn = document.getElementById("nunu-phone-btn");
+  const on = game.modules.get("VirtualAgent")?.active && globalThis.AgentDeviceApp?.ui;
+  if (!on) { btn?.remove(); return; }
+  if (!btn) {
+    btn = document.createElement("button"); btn.type = "button"; btn.id = "nunu-phone-btn"; btn.title = "Open your Agent";
+    btn.addEventListener("click", () => globalThis.AgentDeviceApp.ui.render(true));
+    row.appendChild(btn);
+  }
+  const n = unreadTexts();
+  btn.innerHTML = `<i class="fas fa-mobile-alt"></i>${n ? `<span class="badge">${n > 99 ? "99+" : n}</span>` : ""}`;
+  btn.classList.toggle("ringing", n > 0);
+}
 function renderWidget() {
   if (!game.ready) return;
   const date = getDate(), gm = game.user.isGM;
   let el = document.getElementById("nunu-cal-widget");
   if (!el) {
+    const row = document.createElement("div"); row.id = "nunu-cal-row";
     el = document.createElement("div"); el.id = "nunu-cal-widget";
+    row.appendChild(el);
     const players = document.getElementById("players");
     const host = players?.parentElement ?? document.getElementById("ui-left") ?? document.body;
-    host.insertBefore(el, players ?? null);
+    host.insertBefore(row, players ?? null);
   }
+  renderPhone();
   el.innerHTML = `<button type="button" class="date" title="Open the calendar"><i class="fas fa-calendar-days"></i><span>${esc(longDate(date))}</span></button>` +
     (gm ? `<div class="ctrl"><button type="button" data-adv="-1" title="Back one day"><i class="fas fa-chevron-left"></i></button><button type="button" data-adv="1" title="Forward one day"><i class="fas fa-chevron-right"></i></button><button type="button" class="week" data-adv="7" title="A week passes">+1 week</button></div>` : "");
   el.querySelector(".date").addEventListener("click", () => CalendarApp.open());
@@ -295,3 +318,5 @@ Hooks.once("ready", async () => {
   } catch (e) { console.warn(`${ID} | could not turn on Display Notes`, e); }
 });
 Hooks.on("renderPlayerList", () => renderWidget());
+Hooks.on("updateUser", (user, changes) => { if (user.id === game.user.id && changes.flags?.VirtualAgent) renderPhone(); });
+Hooks.on("createChatMessage", (m) => { if (m.flags?.VirtualAgent?.isAgentMessage) setTimeout(renderPhone, 300); });
