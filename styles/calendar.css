@@ -1,4 +1,4 @@
-#nunu-cal-row{display:flex;align-items:flex-end;gap:8px;margin:0 0 8px 8px;pointer-events:none}
+#nunu-cal-row{display:flex;align-items:stretch;gap:8px;margin:0 0 8px 8px;pointer-events:none}
 #nunu-cal-widget{pointer-events:all;display:inline-flex;flex-direction:column;gap:5px;width:auto;max-width:300px;margin:0;padding:6px 10px;background:rgba(0,0,0,.72);border:1px solid #555;border-radius:6px;color:#eee;font-family:var(--cpr-font-primary,"Jost"),Arial,sans-serif}
 #nunu-cal-widget .date{display:flex;align-items:center;gap:8px;width:auto;background:none;border:0;color:#eee;font-size:14px;font-weight:600;padding:0;cursor:pointer;line-height:1.4;text-shadow:none;white-space:nowrap}
 #nunu-cal-widget .date:hover{color:#f7a1a6;box-shadow:none}
@@ -54,7 +54,7 @@
 #nunu-cal-widget .ctrl .week{background:#5a1f1f !important;border-color:#c62828 !important}
 #nunu-cal-widget .date{background:none !important;border:0 !important;color:#eee !important}
 
-#nunu-phone-btn{pointer-events:all;position:relative;width:44px;height:44px;margin:0;padding:0;flex:0 0 auto;background:rgba(0,0,0,.72);border:1px solid #555;border-radius:6px;color:#eee;font-size:22px;line-height:42px;text-align:center;cursor:pointer}
+#nunu-phone-btn{pointer-events:all;position:relative;width:auto;height:auto;aspect-ratio:1/1;margin:0;padding:0;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72);border:1px solid #555;border-radius:6px;color:#eee;font-size:28px;line-height:1;cursor:pointer}
 #nunu-phone-btn:hover{color:#75e0d7;border-color:#75e0d7;box-shadow:none}
 #nunu-phone-btn.ringing{border-color:#c62828;color:#f7a1a6}
 #nunu-phone-btn .badge{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;background:#c62828;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;font-family:var(--cpr-font-primary,"Jost"),Arial,sans-serif}
