@@ -33,7 +33,7 @@ export const shortDate = (date) => `${WEEKDAYS[weekday(date)].slice(0, 3)} ${dat
 export const REPEATS = ["none", "weekly", "monthly", "yearly"];
 /** What an event does to the people it applies to when its day arrives. */
 export const EFFECTS = ["none", "pay", "ask", "credit", "items", "rent"];
-export const EFFECT_LABELS = {none: "Nothing", pay: "They pay a set amount", ask: "They choose how much to pay", credit: "They receive eddies", items: "They receive items"};
+export const EFFECT_LABELS = {none: "Nothing", pay: "They pay a set amount", ask: "They choose how much to pay", credit: "They receive eddies", items: "They receive items", rent: "Rent and lifestyle"};
 export function normalizeEvent(raw = {}) {
   const start = parse(raw.start) ? raw.start.trim() : null;
   if (!start) throw new Error("An event needs a start date, written YYYY-MM-DD.");
