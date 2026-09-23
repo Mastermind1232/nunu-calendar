@@ -32,7 +32,7 @@ export const shortDate = (date) => `${WEEKDAYS[weekday(date)].slice(0, 3)} ${dat
 /* Events: {id, title, start:"YYYY-MM-DD", end:"YYYY-MM-DD"|"", repeat:"none"|"weekly"|"monthly"|"yearly", visibility:"gm"|"all"|"users", users:[], notes:""} */
 export const REPEATS = ["none", "weekly", "monthly", "yearly"];
 /** What an event does to the people it applies to when its day arrives. */
-export const EFFECTS = ["none", "pay", "ask", "credit", "items"];
+export const EFFECTS = ["none", "pay", "ask", "credit", "items", "rent"];
 export const EFFECT_LABELS = {none: "Nothing", pay: "They pay a set amount", ask: "They choose how much to pay", credit: "They receive eddies", items: "They receive items"};
 export function normalizeEvent(raw = {}) {
   const start = parse(raw.start) ? raw.start.trim() : null;
@@ -82,7 +82,7 @@ export function monthCells(y, m) {
   return cells;
 }
 export const SEED_EVENTS = [
-  {id: "rent", title: "Rent and lifestyle due", start: "2045-09-28", end: "", repeat: "monthly", visibility: "all", users: [], notes: "Housing and food for the month, from the Economic Tables."},
+  {id: "rent", title: "Rent and lifestyle due", start: "2045-09-28", end: "", repeat: "monthly", visibility: "all", users: [], effect: "rent", notes: "Housing and food for the month, from the Economic Tables. Each player is billed from the housing and lifestyle on their Agent ID."},
 ];
 
 /* ---------------- Due records: what lands on whom when a day arrives ---------------- */
@@ -108,6 +108,10 @@ export function dueOn(events, date, users) {
 export const downtimeRecords = (date, users) => users.map((u) => ({id: `downtime:${key(date)}:${u.id}`, userId: String(u.id), kind: "downtime", date: key(date), title: "A week passes"}));
 /** Adds records to a queue without duplicating ids. */
 export const mergeQueue = (queue, records) => { const seen = new Set(queue.map((r) => r.id)); return [...queue, ...records.filter((r) => !seen.has(r.id))]; };
+
+/* ---------------- Rent and lifestyle ---------------- */
+/** Monthly food costs, mirroring the Economic Tables and the Agent's own list. */
+export const LIFESTYLE_COST = {"Kibble": 100, "Generic Prepak": 300, "Good Prepak": 600, "Fresh Food": 1500};
 
 /* ---------------- Hustles (Cyberpunk RED core, downtime) ---------------- */
 /** Payout bands by Role rank 1-4, 5-7, 8-10. `bands` indexes PAY for d6 results 1-6. Outcome text follows the book's Hustle tables. */

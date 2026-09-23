@@ -58,3 +58,12 @@
 #nunu-phone-btn:hover{color:#75e0d7;border-color:#75e0d7;box-shadow:none}
 #nunu-phone-btn.ringing{border-color:#c62828;color:#f7a1a6}
 #nunu-phone-btn .badge{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;background:#c62828;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;font-family:var(--cpr-font-primary,"Jost"),Arial,sans-serif}
+
+.nunu-cal-dialog .bill{width:100%;border-collapse:collapse;margin:0 0 4px;font-variant-numeric:tabular-nums}
+.nunu-cal-dialog .bill td{padding:5px 0;border-bottom:1px solid #c9c7b8;font-size:14px;vertical-align:baseline}
+.nunu-cal-dialog .bill td.what small{display:block;color:#6f6d63;font-size:11.5px;margin-top:1px;font-weight:normal}
+.nunu-cal-dialog .bill td.amt{text-align:right;white-space:nowrap}
+.nunu-cal-dialog .bill tr.total td{border-bottom:0;padding-top:9px;font-weight:700;font-size:15px}
+.nunu-cal-dialog .bill tr.total td.amt{color:#8a6d1f}
+.nunu-cal-dialog .wallet{font-size:11.5px;color:#6f6d63;margin:2px 0 0}
+.nunu-cal-dialog .wallet.short{color:#8b1e1e;font-weight:600}

@@ -1,4 +1,4 @@
-import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, EFFECT_LABELS, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells, daysBetween, dueOn, downtimeRecords, mergeQueue, hustleResult, HUSTLES, ROLE_BY_ABILITY} from "./lib.mjs";
+import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, EFFECT_LABELS, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells, daysBetween, dueOn, downtimeRecords, LIFESTYLE_COST, mergeQueue, hustleResult, HUSTLES, ROLE_BY_ABILITY} from "./lib.mjs";
 
 const SOCKET = `module.${ID}`;
 
@@ -29,6 +29,19 @@ export async function advance(days) {
 }
 
 /* ------------------------------------------------------------------ */
+
+/* ---------------- Rent and lifestyle ---------------- */
+/** What a character owes this month, read from the housing and lifestyle set on their Agent ID.
+    The Agent stores these as flags on the character, falling back to the user for older worlds. */
+function rentBill(actor, user) {
+  const flag = (k) => actor?.getFlag?.("VirtualAgent", k) || user?.getFlag?.("VirtualAgent", k) || "";
+  const housing = String(flag("housingStatus"));
+  const rent = Math.max(0, Math.floor(Number(String(flag("housingRent")).replace(/[^0-9.]/g, "")) || 0));
+  const food = String(flag("lifestyle"));
+  const foodCost = Math.max(0, Math.floor(Number(LIFESTYLE_COST[food]) || 0));
+  return {housing, rent, food, foodCost, total: rent + foodCost, set: !!(housing || food)};
+}
+
 /*  The queue: things owed to players, kept until they answer          */
 /* ------------------------------------------------------------------ */
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
@@ -65,6 +78,20 @@ async function resolve(msg, user) {
     const amount = rec.kind === "ask" ? Math.max(0, Math.floor(Number(msg.amount) || 0)) : rec.amount;
     if (msg.choice !== "pay" || amount <= 0) { await receipt(`<b>${esc(actor.name)}</b> did not pay for ${esc(rec.title)}.`); }
     else { await actor.update(moneyUpdate(actor, -amount, `${rec.reason} (${rec.date})`)); await receipt(`<b>${esc(actor.name)}</b> paid ${amount}eb: ${esc(rec.reason)}.`); }
+  } else if (rec.kind === "rent") {
+    // Recomputed here rather than trusted from the client, so the bill is always the sheet's.
+    const bill = rentBill(actor, user);
+    const wallet = Math.max(0, Math.floor(Number(actor.system?.wealth?.value) || 0));
+    const owed = bill.total;
+    if (!bill.set || owed <= 0) { await receipt(`<b>${esc(actor.name)}</b> has no housing or lifestyle on file, so nothing was charged.`); }
+    else if (msg.choice !== "pay") { await receipt(`<b>${esc(actor.name)}</b> <span style="color:#e06666">did not pay rent this month.</span>`); }
+    else {
+      const paid = Math.min(owed, wallet);
+      if (paid > 0) await actor.update(moneyUpdate(actor, -paid, `Rent and lifestyle (${rec.date})`));
+      await receipt(paid >= owed
+        ? `<b>${esc(actor.name)}</b> paid <b>${paid.toLocaleString()}eb</b> for rent and lifestyle.`
+        : `<b>${esc(actor.name)}</b> paid <b>${paid.toLocaleString()}eb</b> of <b>${owed.toLocaleString()}eb</b>. <span style="color:#e06666">${(owed - paid).toLocaleString()}eb short.</span>`);
+    }
   } else if (rec.kind === "credit") {
     await actor.update(moneyUpdate(actor, rec.amount, `${rec.reason} (${rec.date})`));
     await receipt(`<b>${esc(actor.name)}</b> received ${rec.amount}eb: ${esc(rec.reason)}.`);
@@ -78,6 +105,25 @@ async function resolve(msg, user) {
     }
     await actor.createEmbeddedDocuments("Item", docs);
     await receipt(`<b>${esc(actor.name)}</b> received ${rec.items.map((i) => `${i.qty > 1 ? `${i.qty}× ` : ""}${esc(i.name)}`).join(", ")}: ${esc(rec.reason)}.`);
+  } else if (rec.kind === "rent") {
+    const actor = game.user.character;
+    const bill = rentBill(actor, game.user);
+    const wallet = Math.max(0, Math.floor(Number(actor?.system?.wealth?.value) || 0));
+    const line = (label, detail, amount) =>
+      `<tr><td class="what">${label}<small>${esc(detail || "Nothing on file")}</small></td><td class="amt">${amount === null ? "&mdash;" : `${amount.toLocaleString()}eb`}</td></tr>`;
+    const table = `<table class="bill">${line("Housing", bill.housing, bill.set ? bill.rent : null)}${line("Lifestyle", bill.food, bill.set ? bill.foodCost : null)}<tr class="total"><td class="what">Due</td><td class="amt">${bill.set ? `${bill.total.toLocaleString()}eb` : "&mdash;"}</td></tr></table>`;
+
+    if (!bill.set || bill.total <= 0) {
+      content = wrap(`<h3>${esc(rec.title)}</h3>${table}<p class="wallet">Ask your GM to set where you live and what you eat.</p>`);
+      buttons = {skip: {label: "Close", callback: () => send({choice: "skip"})}};
+    } else {
+      const short = wallet < bill.total;
+      content = wrap(`<h3>${esc(rec.title)}</h3>${table}<p class="wallet${short ? " short" : ""}">You have ${wallet.toLocaleString()}eb.${short ? ` You are ${(bill.total - wallet).toLocaleString()}eb short.` : ""}</p>`);
+      buttons = {
+        pay: {label: short ? `Pay what I have` : `Pay ${bill.total.toLocaleString()}eb`, callback: () => send({choice: "pay"})},
+        skip: {label: "Don't pay", callback: () => send({choice: "skip"})},
+      };
+    }
   } else if (rec.kind === "downtime") {
     const hqApi = game.modules.get("nunu-headquarters")?.api;
     if (msg.choice === "rest") {
