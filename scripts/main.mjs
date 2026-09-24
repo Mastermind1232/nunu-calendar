@@ -357,6 +357,7 @@ Hooks.once("init", () => {
   game.settings.register(ID, "date", {scope: "world", config: false, type: Object, default: DEFAULT_DATE, onChange: () => { renderWidget(); CalendarApp.refresh(); }});
   game.settings.register(ID, "events", {scope: "world", config: false, type: Object, default: [], onChange: () => CalendarApp.refresh()});
   game.settings.register(ID, "seeded", {scope: "world", config: false, type: Boolean, default: false});
+  game.settings.register(ID, "rentSeeded", {scope: "world", config: false, type: Boolean, default: false});
   game.settings.register(ID, "settled", {scope: "world", config: false, type: Array, default: []});
   game.settings.register(ID, "queue", {scope: "world", config: false, type: Object, default: [], onChange: () => showPending()});
   loadTemplates([`modules/${ID}/templates/grid.hbs`]);
@@ -365,6 +366,16 @@ Hooks.once("ready", async () => {
   if (game.user.isGM && !game.settings.get(ID, "seeded")) {
     if (!(game.settings.get(ID, "events") ?? []).length) await saveEvents(SEED_EVENTS);
     await game.settings.set(ID, "seeded", true);
+  }
+  // Seed events only land in a world that has never been seeded. Rent arrived in 1.2.0,
+  // after this world was already running, so without this backfill the 28th passes with
+  // nothing on the calendar to bill and rent day can never fire. Added once; a GM who
+  // deletes it keeps it deleted.
+  if (game.user.isGM && !game.settings.get(ID, "rentSeeded")) {
+    const events = game.settings.get(ID, "events") ?? [];
+    const seed = SEED_EVENTS.find((e) => e.effect === "rent");
+    if (seed && !events.some((e) => e.effect === "rent")) await saveEvents([...events, seed]);
+    await game.settings.set(ID, "rentSeeded", true);
   }
   game.modules.get(ID).api = {getDate, setDate, advance, getEvents, getQueue, longDate, shortDate, parse, open: CalendarApp.open};
   game.socket.on(SOCKET, async (msg) => {
