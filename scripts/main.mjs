@@ -380,7 +380,12 @@ Hooks.once("ready", async () => {
   if (game.user.isGM && !game.settings.get(ID, "rentSeeded")) {
     const events = game.settings.get(ID, "events") ?? [];
     const seed = SEED_EVENTS.find((e) => e.effect === "rent");
-    if (seed && !events.some((e) => e.effect === "rent")) await saveEvents([...events, seed]);
+    // Match on the event's id, not on what it does. A world seeded before the rent
+    // effect existed already carries an event with this id that does nothing, and
+    // matching on the effect put a second one beside it under the same id, so
+    // deleting either took both.
+    if (seed && !events.some((e) => e.id === seed.id)) await saveEvents([...events, seed]);
+    else if (seed) await saveEvents(events.map((e) => (e.id === seed.id && e.effect !== "rent" ? { ...e, ...seed } : e)));
     await game.settings.set(ID, "rentSeeded", true);
   }
   game.modules.get(ID).api = {getDate, setDate, advance, getEvents, getQueue, longDate, shortDate, parse, open: CalendarApp.open};
