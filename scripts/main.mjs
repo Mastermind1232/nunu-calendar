@@ -216,6 +216,12 @@ function showPending() {
 /* ------------------------------------------------------------------ */
 /* The Agent phone: a floating button beside the calendar that opens Virtual Agent, with its unread count. Only when that module is on. */
 function unreadTexts() {
+  // The Agent publishes its own total, filtered to threads that still exist. Summing the
+  // raw flag here instead would count messages for contacts somebody has deleted, which
+  // the phone hides and nothing can clear, leaving a badge that never goes away.
+  if (typeof globalThis.VirtualAgentUnreadTotal === "function") {
+    try { return globalThis.VirtualAgentUnreadTotal(); } catch (e) { /* fall through */ }
+  }
   const u = game.user.getFlag("VirtualAgent", "unreads") ?? {};
   return Object.values(u).reduce((a, n) => a + (Number(n) > 0 ? Number(n) : 0), 0);
 }
