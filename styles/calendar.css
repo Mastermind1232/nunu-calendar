@@ -54,10 +54,10 @@
 #nunu-cal-widget .ctrl .week{background:#5a1f1f !important;border-color:#c62828 !important}
 #nunu-cal-widget .date{background:none !important;border:0 !important;color:#eee !important}
 
-#nunu-phone-btn{pointer-events:all;position:relative;width:auto;height:auto;aspect-ratio:1/1;margin:0;padding:0;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72);border:1px solid #555;border-radius:6px;color:#eee;font-size:28px;line-height:1;cursor:pointer}
+#nunu-phone-btn{pointer-events:all;position:relative;width:auto;height:auto;aspect-ratio:1/1;margin:0;padding:0;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72);border:1px solid #555;border-radius:6px;color:#eee;font-size:25px;line-height:1;cursor:pointer}
 #nunu-phone-btn:hover{color:#75e0d7;border-color:#75e0d7;box-shadow:none}
 #nunu-phone-btn.ringing{border-color:#c62828;color:#f7a1a6}
-#nunu-phone-btn .badge{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;background:#c62828;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;font-family:var(--cpr-font-primary,"Jost"),Arial,sans-serif}
+#nunu-phone-btn .badge{position:absolute;top:0;right:0;transform:translate(50%,-50%);min-width:18px;height:18px;padding:0 5px;background:#c62828;color:#fff;border-radius:9px;font-size:11px;font-weight:700;line-height:18px;font-family:var(--cpr-font-primary,"Jost"),Arial,sans-serif}
 
 .nunu-cal-dialog .bill{width:100%;border-collapse:collapse;margin:0 0 4px;font-variant-numeric:tabular-nums}
 .nunu-cal-dialog .bill td{padding:5px 0;border-bottom:1px solid #c9c7b8;font-size:14px;vertical-align:baseline}

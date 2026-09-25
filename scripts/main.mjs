@@ -231,7 +231,7 @@ function renderPhone() {
     row.appendChild(btn);
   }
   const n = unreadTexts();
-  btn.innerHTML = `<i class="fas fa-mobile-alt"></i>${n ? `<span class="badge">${n > 99 ? "99+" : n}</span>` : ""}`;
+  btn.innerHTML = `<i class="fas fa-mobile-alt"></i>${n ? `<span class="badge">${n > 9 ? "9+" : n}</span>` : ""}`;
   btn.classList.toggle("ringing", n > 0);
 }
 function renderWidget() {
