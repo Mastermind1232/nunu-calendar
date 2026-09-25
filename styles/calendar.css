@@ -3,8 +3,8 @@
 #nunu-cal-widget .date{display:flex;align-items:center;gap:8px;width:auto;background:none;border:0;color:#eee;font-size:14px;font-weight:600;padding:0;cursor:pointer;line-height:1.4;text-shadow:none;white-space:nowrap}
 #nunu-cal-widget .date:hover{color:#f7a1a6;box-shadow:none}
 #nunu-cal-widget .date i{color:#c62828}
-#nunu-cal-widget .ctrl{display:grid;grid-template-columns:30px 30px 1fr;gap:4px}
-#nunu-cal-widget .ctrl button{width:100%;min-width:0;height:24px;margin:0;background:#26394e;border:1px solid #667e99;color:#fff;border-radius:3px;padding:0 6px;font-size:12px;line-height:22px;cursor:pointer}
+#nunu-cal-widget .ctrl{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+#nunu-cal-widget .ctrl button{width:100%;min-width:0;height:28px;margin:0;background:#26394e;border:1px solid #667e99;color:#fff;border-radius:3px;padding:0 8px;font-size:13px;font-weight:600;line-height:26px;white-space:nowrap;cursor:pointer}
 #nunu-cal-widget .ctrl button:hover{background:#364d66;box-shadow:none}
 #nunu-cal-widget .ctrl .week{background:#5a1f1f;border-color:#c62828}
 .nunu-cal .window-content{background:#121923;color:#e8edf4;font-family:var(--cpr-font-primary,"Jost"),Arial,sans-serif}
