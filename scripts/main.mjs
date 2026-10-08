@@ -1,4 +1,4 @@
-import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, EFFECT_LABELS, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells, daysBetween, dueOn, downtimeRecords, LIFESTYLE_COST, mergeQueue, hustleResult, HUSTLES, ROLE_BY_ABILITY, SALVAGE_CATEGORIES, SALVAGE_SKILL, SALVAGE_SKILL_SLUG, SALVAGE_PERIL_DAMAGE, SALVAGE_PERIL_ROUNDS, salvageCategory, salvagePeril, salvageHaul} from "./lib.mjs";
+import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, EFFECT_LABELS, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells, daysBetween, dueOn, downtimeRecords, LIFESTYLE_COST, mergeQueue, hustleResult, HUSTLES, ROLE_BY_ABILITY} from "./lib.mjs";
 
 const SOCKET = `module.${ID}`;
 
@@ -139,42 +139,6 @@ async function resolve(msg, user) {
       const healed = Math.max(0, Math.min((body + bonus) * 7, hp.max - hp.value));
       if (healed) await actor.update({"system.derivedStats.hp.value": hp.value + healed});
       await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> chose to rest for the week.${healed ? ` Recovered ${healed} HP${bonus ? ` (BODY +${bonus} from the HQ)` : ""}.` : ""}</div>`, speaker: {alias: "Calendar"}});
-    } else if (msg.choice === "salvage") {
-      // Salvaging Night City. The player's client rolled the category and the Basic Tech Check,
-      // because that is where the system's roll dialog, their Luck and their Active Effects live.
-      // This side only reads the Salvage Worth table, or the Perils table on a Critical Failure.
-      const speaker = ChatMessage.getSpeaker({actor});
-      const named = SALVAGE_CATEGORIES.includes(msg.category);
-      const pick = Number(msg.pick), face = Number(msg.face), total = Number(msg.total);
-      if (!named && !(Number.isInteger(pick) && pick >= 1 && pick <= 6)) throw new Error(`${actor.name}'s Salvage Categories roll did not come through.`);
-      if (!Number.isInteger(face) || face < 1 || face > 10 || !Number.isFinite(total)) throw new Error(`${actor.name}'s Basic Tech Check did not come through.`);
-      const category = named ? msg.category : salvageCategory(pick);
-      const hunt = named
-        ? `They went looking for <b>${esc(category)}</b>.`
-        : `They took whatever they could find, and the ruins gave up <b>${esc(category)}</b>.`;
-      if (face === 1) {
-        const peril = await new Roll("1d6").evaluate();
-        await peril.toMessage({speaker, flavor: "Perils of Salvaging"});
-        const which = Number(peril.total);
-        let rolled = "";
-        if (SALVAGE_PERIL_DAMAGE.includes(which)) {
-          const dmg = await new Roll("6d6").evaluate();
-          await dmg.toMessage({speaker, flavor: "Perils of Salvaging: damage before armor"});
-          rolled = ` That is <b>${dmg.total}</b> damage before armor.`;
-        } else if (which === SALVAGE_PERIL_ROUNDS) {
-          const rounds = await new Roll("1d10").evaluate();
-          await rounds.toMessage({speaker, flavor: "Perils of Salvaging: rounds of exposure"});
-          rolled = ` That is <b>${rounds.total}</b> rounds of it.`;
-        }
-        const crit = which === 1 ? " Roll the Critical Injury from the sheet's own Roll Critical Injury control, on the Body table." : "";
-        await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> spent the week salvaging and hauled out nothing. ${hunt} <span style="color:#e06666">Critical Failure on the Basic Tech Check.</span> ${esc(salvagePeril(which))}${rolled}${crit}</div>`, speaker: {alias: "Calendar"}});
-      } else {
-        const haul = salvageHaul(total, named);
-        const outcome = haul.worth
-          ? `That beats DV ${haul.dv}, so there is <b>${haul.worth.toLocaleString()}eb</b> of ${esc(category)} to pick out. Everything they take is Destroyed until it is repaired, and any worth they do not spend is lost.`
-          : `They needed DV ${haul.next.dv} for even ${haul.next.worth}eb of ${esc(category)}, so the week was a write-off.`;
-        await ChatMessage.create({content: `<div class="nunu-cal-chat"><b>${esc(actor.name)}</b> spent the week salvaging. ${hunt} Basic Tech Check: <b>${total}</b>. ${outcome}</div>`, speaker: {alias: "Calendar"}});
-      }
     } else {
       const role = actorRoles(actor).find((r) => r.id === msg.roleId) ?? actorRoles(actor)[0];
       if (!role) throw new Error(`${actor.name} has no Role with a rank to hustle with.`);
@@ -195,99 +159,8 @@ async function resolve(msg, user) {
   await dequeue(rec.id);
 }
 
-/* ------------------------------------------------------------------ */
-/*  Salvaging, the player's half                                       */
-/* ------------------------------------------------------------------ */
-/** The actor's Basic Tech skill item, matched on the name CPR gives it in an English world. */
-const basicTechItem = (actor) => (actor.itemTypes?.skill ?? []).find((i) => String(i.name).trim().toLowerCase() === SALVAGE_SKILL.toLowerCase()) ?? null;
-
-/** CPR's own skill roll card, rendered from the system's template so salvage looks like every other check. */
-async function renderCprCard(cprRoll, actor) {
-  try {
-    cprRoll.criticalCard = cprRoll.wasCritical();
-    cprRoll.entityData = {actor: actor.id, token: null, tokens: []};
-    const html = await renderTemplate(cprRoll.rollCard, cprRoll);
-    await ChatMessage.create({content: html, speaker: ChatMessage.getSpeaker({actor})});
-  } catch (e) { console.warn(`${ID} | CPR's roll card would not render, the result still stands`, e); }
-}
-
-/**
- * A Basic Tech Check made through CPR's own skill-roll pipeline, so wound state, armor penalties,
- * role mods, Active Effects and spent Luck are all in the total and the player sees the usual card.
- * Returns null when they close the roll dialog, so the week is not spent. Falls back to a plain d10
- * off the system's derived skill numbers if those internals ever move.
- */
-async function basicTechCheck(actor) {
-  const item = basicTechItem(actor);
-  if (item) {
-    try {
-      const cprRoll = item.createRoll("skill", actor);
-      if (!cprRoll) throw new Error("CPR returned no roll for Basic Tech.");
-      const go = await cprRoll.handleRollDialog({type: "click", ctrlKey: false, metaKey: false}, actor, item);
-      if (!go) return null;
-      await cprRoll.roll();
-      const face = Number(cprRoll.initialRoll), total = Number(cprRoll.resultTotal);
-      // Checked before Luck is spent, so a roll that came back wrong falls through to the
-      // plain d10 below without the player having paid for it.
-      if (!Number.isInteger(face) || face < 1 || face > 10 || !Number.isFinite(total)) throw new Error("CPR's roll came back without a d10.");
-      if (Number.isInteger(cprRoll.luck) && cprRoll.luck > 0) {
-        const luck = Number(actor.system?.stats?.luck?.value) || 0;
-        await actor.update({"system.stats.luck.value": Math.max(0, luck - cprRoll.luck)});
-      }
-      await renderCprCard(cprRoll, actor);
-      return {face, total};
-    } catch (e) {
-      console.warn(`${ID} | CPR's skill roll could not be used, falling back to a plain d10`, e);
-    }
-  }
-  // Fallback. system.skills carries the STAT value, the level and the Active Effect mods already summed.
-  const s = actor.system?.skills?.[SALVAGE_SKILL_SLUG];
-  const stat = Number(s?.stat ?? actor.system?.stats?.tech?.value) || 0;
-  const level = Number(s?.level) || 0, mods = Number(s?.mods) || 0;
-  const bonus = stat + level + mods;
-  const roll = await new Roll("1d10").evaluate();
-  const face = Number(roll.total);
-  const speaker = ChatMessage.getSpeaker({actor});
-  await roll.toMessage({speaker, flavor: `Basic Tech Check: TECH ${stat} + ${SALVAGE_SKILL} ${level}${mods ? ` + mods ${mods}` : ""}, so ${face} + ${bonus}`});
-  let total = face + bonus;
-  if (face === 10) {
-    const up = await new Roll("1d10").evaluate();
-    await up.toMessage({speaker, flavor: "Critical Success: add another d10"});
-    total += Number(up.total);
-  }
-  return {face, total};
-}
-
-/**
- * One salvaging week: the category, then the Check. Both are rolled here rather than on the GM's
- * client so the player owns their own dice. The GM is sent the numbers and reads the table.
- */
-async function salvageWeek(rec, wanted) {
-  const actor = game.user.character;
-  if (!actor) throw new Error("You have no assigned character.");
-  const category = SALVAGE_CATEGORIES.includes(wanted) ? wanted : "";
-  // The Check comes first even though the book numbers the category as Step 1. Which category
-  // turns up never changes the DV, and rolling it before the Check would let a player close the
-  // roll dialog and come back for a category they liked better.
-  const check = await basicTechCheck(actor);
-  if (!check) return false;
-  let pick = 0;
-  if (!category) {
-    const r = await new Roll("1d6").evaluate();
-    await r.toMessage({speaker: ChatMessage.getSpeaker({actor}), flavor: "Salvage Categories"});
-    pick = Number(r.total);
-  }
-  game.socket.emit(SOCKET, {type: "resolve", id: rec.id, userId: game.user.id, choice: "salvage", category, pick, face: check.face, total: check.total});
-  return true;
-}
-
 /* Player side: show one pending popup at a time, only while a GM is online to apply it. */
 const shown = new Set();
-/* Records mid-roll. A salvage week sits open in CPR's roll dialog for a while, and every queue
-   change calls showPending(), so without this the same week can be offered and rolled twice. */
-const busy = new Set();
-/** Put a record back on offer after a player backed out of it or it failed mid-roll. */
-const reopen = (id) => { busy.delete(id); shown.delete(id); showPending(); };
 function showPending() {
   if (!game.ready || game.user.isGM) return;
   const rec = getQueue().find((r) => r.userId === game.user.id && !shown.has(r.id));
@@ -331,19 +204,11 @@ function showPending() {
   } else if (rec.kind === "downtime") {
     const roles = game.user.character ? actorRoles(game.user.character) : [];
     const pick = roles.length > 1 ? `<label>Hustle as<select name="role">${roles.map((r) => `<option value="${r.id}">${esc(r.name)} · rank ${r.rank}</option>`).join("")}</select></label>` : "";
-    const cats = `<label>Salvage for<select name="category"><option value="">Take what you can find</option>${SALVAGE_CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></label>`;
-    content = wrap(`<h3>A week passes</h3><p><b>Rest up:</b> recover HP equal to your BODY for each of the seven days.</p><p><b>Hustle:</b> roll on your Role's Hustle table and earn what the week brings.</p>${pick}<p><b>Salvage:</b> pick through the ruins for gear to keep or sell. Your <b>Basic Tech</b> Check sets how much you come out with, naming a category is harder than taking what you find, and everything you drag out is Destroyed until you repair it.</p>${cats}`);
+    content = wrap(`<h3>A week passes</h3><p><b>Rest up:</b> recover HP equal to your BODY for each of the seven days.</p><p><b>Hustle:</b> roll on your Role's Hustle table and earn what the week brings.</p>${pick}`);
     buttons = {rest: {icon: '<i class="fas fa-bed"></i>', label: "Rest up", callback: () => send({choice: "rest"})},
-      hustle: {icon: '<i class="fas fa-coins"></i>', label: "Hustle", callback: (html) => send({choice: "hustle", roleId: html.find('[name=role]').val() ?? roles[0]?.id})},
-      salvage: {icon: '<i class="fas fa-dumpster"></i>', label: "Salvage", callback: (html) => {
-        const category = String(html.find('[name=category]').val() ?? "");
-        busy.add(rec.id);
-        salvageWeek(rec, category)
-          .then((sent) => { if (!sent) reopen(rec.id); })
-          .catch((e) => { console.error(`${ID} | salvaging`, e); ui.notifications.error(`The salvage check could not be rolled: ${e.message}`); reopen(rec.id); });
-      }}};
+      hustle: {icon: '<i class="fas fa-coins"></i>', label: "Hustle", callback: (html) => send({choice: "hustle", roleId: html.find('[name=role]').val() ?? roles[0]?.id})}};
   } else { shown.delete(rec.id); return; }
-  new Dialog({title: rec.kind === "downtime" ? "Downtime" : "The Calendar", content, buttons, close: () => { if (!busy.has(rec.id)) shown.delete(rec.id); }}, {classes: ["dialog", "nunu-cal-dialog"], width: 440}).render(true);
+  new Dialog({title: rec.kind === "downtime" ? "Downtime" : "The Calendar", content, buttons, close: () => { shown.delete(rec.id); }}, {classes: ["dialog", "nunu-cal-dialog"], width: 440}).render(true);
 }
 
 /* ------------------------------------------------------------------ */
@@ -525,7 +390,7 @@ Hooks.once("ready", async () => {
   }
   game.modules.get(ID).api = {getDate, setDate, advance, getEvents, getQueue, longDate, shortDate, parse, open: CalendarApp.open};
   game.socket.on(SOCKET, async (msg) => {
-    if (msg?.type === "reply") { if (msg.userId === game.user.id) { ui.notifications.warn(msg.text, {permanent: true}); busy.delete(msg.id); shown.delete(msg.id); } return; }
+    if (msg?.type === "reply") { if (msg.userId === game.user.id) { ui.notifications.warn(msg.text, {permanent: true}); shown.delete(msg.id); } return; }
     if (msg?.type !== "resolve" || activeGM()?.id !== game.user.id) return;
     const user = game.users.get(msg.userId);
     if (!user) return;

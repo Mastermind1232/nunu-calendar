@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {addDays, weekday, daysInMonth, ordinal, longDate, shortDate, parse, key, normalizeEvent, occursOn, canSee, eventsOn, monthCells, WEEKDAYS, daysBetween, dueOn, downtimeRecords, mergeQueue, hustleResult, HUSTLES, SALVAGE_TABLE, SALVAGE_CATEGORIES, SALVAGE_WORTH, SALVAGE_PERILS, salvageCategory, salvagePeril, salvageHaul} from "../scripts/lib.mjs";
+import {addDays, weekday, daysInMonth, ordinal, longDate, shortDate, parse, key, normalizeEvent, occursOn, canSee, eventsOn, monthCells, WEEKDAYS, daysBetween, dueOn, downtimeRecords, mergeQueue, hustleResult, HUSTLES} from "../scripts/lib.mjs";
 
 test("date arithmetic crosses months and years", () => {
   assert.deepEqual(addDays({y: 2045, m: 9, d: 28}, 7), {y: 2045, m: 10, d: 5});
@@ -97,42 +97,4 @@ test("named players can each owe a different amount", () => {
   const due = dueOn([rent], {y: 2045, m: 9, d: 28}, [{id: "a"}, {id: "b"}, {id: "c"}]);
   assert.deepEqual(due.map((r) => [r.userId, r.amount]), [["a", 1100], ["b", 1800]]);
   assert.throws(() => normalizeEvent({title: "Rent", start: "2045-09-28", visibility: "users", users: ["a"], effect: "pay"}), /amount/);
-});
-
-test("salvage categories come off a d6 with General Gear doubled", () => {
-  assert.equal(SALVAGE_TABLE.length, 6);
-  assert.deepEqual([1, 2, 3, 4, 5, 6].map(salvageCategory), ["Cyberware", "Weapons", "General Gear", "General Gear", "Armor", "Cyberdecks and Programs"]);
-  assert.deepEqual(SALVAGE_CATEGORIES, ["Cyberware", "Weapons", "General Gear", "Armor", "Cyberdecks and Programs"], "the picker offers each category once");
-  assert.throws(() => salvageCategory(0)); assert.throws(() => salvageCategory(7));
-});
-
-test("salvage worth reads the right column and the right band", () => {
-  assert.equal(salvageHaul(8).worth, 0, "DV 9 is the floor when taking what you can find");
-  assert.deepEqual(salvageHaul(8).next, {worth: 10, dv: 9});
-  assert.equal(salvageHaul(9).worth, 10);
-  assert.equal(salvageHaul(14).worth, 20, "between bands, keep the lower one");
-  assert.equal(salvageHaul(25).worth, 500);
-  assert.equal(salvageHaul(29).worth, 1000);
-  assert.equal(salvageHaul(99).worth, 1000, "1000eb is the ceiling");
-  assert.equal(salvageHaul(12, true).worth, 0, "a named category needs DV 13 before it pays anything");
-  assert.deepEqual(salvageHaul(12, true).next, {worth: 10, dv: 13});
-  assert.equal(salvageHaul(13, true).worth, 10);
-  assert.equal(salvageHaul(20, true).worth, 50, "DV 21 not yet reached");
-  assert.equal(salvageHaul(29, true).worth, 500, "a named category tops out at 500eb");
-  assert.equal(salvageHaul(99, true).worth, 500);
-  assert.equal(salvageHaul(25).dv, 24, "the message quotes the DV that was beaten");
-  assert.equal(salvageHaul(1000).next, null, "nothing left to miss at the ceiling");
-  assert.throws(() => salvageHaul("25"));
-});
-
-test("salvage worth bands rise with the DV in both columns", () => {
-  const any = SALVAGE_WORTH.map((r) => r.any), specific = SALVAGE_WORTH.filter((r) => r.specific !== null).map((r) => r.specific);
-  for (const col of [any, specific]) for (let i = 1; i < col.length; i++) assert.ok(col[i] > col[i - 1], "salvageHaul walks the table in order");
-});
-
-test("perils of salvaging has six entries", () => {
-  assert.equal(SALVAGE_PERILS.length, 6);
-  assert.match(salvagePeril(1), /Critical Injury/);
-  assert.match(salvagePeril(3), /Radiation Suit/);
-  assert.throws(() => salvagePeril(7));
 });
