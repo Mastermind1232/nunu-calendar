@@ -412,6 +412,19 @@ Hooks.once("ready", async () => {
     }
   } catch (e) { console.warn(`${ID} | could not turn on Display Notes`, e); }
 });
+/* CPR's ledger dialog is hard-coded to 600px wide and clips its own history rows, so a
+   Reputation or Wealth line with a reason written on it is unreadable. Widen it once per
+   dialog, leaving any later drag alone, and let the stylesheet below wrap the rows. */
+Hooks.on("renderCPRLedger", (app) => {
+  try {
+    if (app._nunuWidened) return;
+    app._nunuWidened = true;
+    const width = Math.min(1100, Math.max(600, window.innerWidth - 120));
+    if (!(width > (app.position?.width ?? 0))) return;
+    app.setPosition({width, left: Math.max(0, Math.round((window.innerWidth - width) / 2))});
+  } catch (e) { console.warn(`${ID} | could not widen the CPR ledger`, e); }
+});
+
 Hooks.on("renderPlayerList", () => renderWidget());
 Hooks.on("updateUser", (user, changes) => { if (user.id === game.user.id && changes.flags?.VirtualAgent) renderPhone(); });
 Hooks.on("createChatMessage", (m) => { if (m.flags?.VirtualAgent?.isAgentMessage) setTimeout(renderPhone, 300); });

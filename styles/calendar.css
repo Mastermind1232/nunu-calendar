@@ -67,3 +67,9 @@
 .nunu-cal-dialog .bill tr.total td.amt{color:#8a6d1f}
 .nunu-cal-dialog .wallet{font-size:11.5px;color:#6f6d63;margin:2px 0 0}
 .nunu-cal-dialog .wallet.short{color:#8b1e1e;font-weight:600}
+
+/* CPR sets the ledger rows to nowrap and clips the overflow, which eats the reason column.
+   Let them wrap instead; the dialog is widened in main.mjs to give them the room. */
+.ledger-history-list{white-space:normal !important;height:auto !important;min-height:1.3rem}
+.ledger-history-list .ledger-transaction,
+.ledger-history-list .ledger-reason{overflow:visible !important;overflow-wrap:anywhere}
