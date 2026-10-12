@@ -53,6 +53,42 @@ function rentBill(actor, user) {
   return {housing, rent, food, foodCost, total: rent + foodCost, set: !!(housing || food)};
 }
 
+/** Who can cover this month's rent, for the GM to read before stepping the date over the 28th.
+    Uses the same bill the player's own prompt will use, so the preview cannot disagree with it. */
+export function rentPreview() {
+  return playerUsers().map(({id}) => {
+    const user = game.users.get(id);
+    const actor = agentActor(user);
+    const bill = rentBill(actor, user);
+    const wallet = Math.max(0, Math.floor(Number(actor?.system?.wealth?.value) || 0));
+    return {user: user?.name ?? "Unknown", actor: actor?.name ?? "No character", ...bill, wallet, short: bill.set ? Math.max(0, bill.total - wallet) : 0};
+  });
+}
+
+/** Whispers the preview to the GM as a table. Meant to be the whole of a one-line macro. */
+export async function rentCheck() {
+  if (!game.user.isGM) return ui.notifications.warn("Only the GM can check the rent.");
+  const rows = rentPreview();
+  if (!rows.length) return ui.notifications.warn("No player users with a character assigned.");
+  const money = (n) => `${Number(n).toLocaleString()}eb`;
+  const body = rows.map((r) => {
+    const state = !r.set ? '<span style="opacity:.7">nothing on file</span>'
+      : r.short ? `<span style="color:#e06666">${money(r.short)} short</span>`
+      : '<span style="color:#4c9a4c">covered</span>';
+    return `<tr><td>${esc(r.actor)}<br><small style="opacity:.7">${esc(r.user)}</small></td><td style="text-align:right">${r.set ? money(r.total) : "&mdash;"}</td><td style="text-align:right">${money(r.wallet)}</td><td style="text-align:right">${state}</td></tr>`;
+  }).join("");
+  const owed = rows.reduce((a, r) => a + (r.set ? r.total : 0), 0);
+  const shortfall = rows.reduce((a, r) => a + r.short, 0);
+  await ChatMessage.create({
+    whisper: ChatMessage.getWhisperRecipients("GM").map((u) => u.id),
+    speaker: {alias: "Calendar"},
+    content: `<div class="nunu-cal-chat"><h3 style="margin:0 0 4px">Rent and lifestyle check</h3>
+      <table style="width:100%;font-size:12px"><tr style="font-weight:bold"><td>Who</td><td style="text-align:right">Due</td><td style="text-align:right">Has</td><td style="text-align:right">&nbsp;</td></tr>${body}
+      <tr style="font-weight:bold;border-top:1px solid #888"><td>Total</td><td style="text-align:right">${money(owed)}</td><td style="text-align:right">&mdash;</td><td style="text-align:right">${shortfall ? `<span style="color:#e06666">${money(shortfall)} short</span>` : '<span style="color:#4c9a4c">all covered</span>'}</td></tr></table></div>`,
+  });
+  return rows;
+}
+
 /*  The queue: things owed to players, kept until they answer          */
 /* ------------------------------------------------------------------ */
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
@@ -388,7 +424,7 @@ Hooks.once("ready", async () => {
     else if (seed) await saveEvents(events.map((e) => (e.id === seed.id && e.effect !== "rent" ? { ...e, ...seed } : e)));
     await game.settings.set(ID, "rentSeeded", true);
   }
-  game.modules.get(ID).api = {getDate, setDate, advance, getEvents, getQueue, longDate, shortDate, parse, open: CalendarApp.open};
+  game.modules.get(ID).api = {getDate, setDate, advance, getEvents, getQueue, longDate, shortDate, parse, open: CalendarApp.open, rentPreview, rentCheck};
   game.socket.on(SOCKET, async (msg) => {
     if (msg?.type === "reply") { if (msg.userId === game.user.id) { ui.notifications.warn(msg.text, {permanent: true}); shown.delete(msg.id); } return; }
     if (msg?.type !== "resolve" || activeGM()?.id !== game.user.id) return;
