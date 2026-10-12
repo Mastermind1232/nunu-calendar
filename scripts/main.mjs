@@ -290,8 +290,10 @@ function renderWidget() {
   }
   renderPhone();
   el.innerHTML = `<button type="button" class="date" title="Open the calendar"><i class="fas fa-calendar-days"></i><span>${esc(longDate(date))}</span></button>` +
-    (gm ? `<div class="ctrl"><button type="button" data-adv="1" title="Forward one day">+1 Day</button><button type="button" class="week" data-adv="7" title="A week passes">+1 Week</button></div>` : "");
+    (gm ? `<div class="ctrl"><button type="button" data-adv="1" title="Forward one day">+1 Day</button><button type="button" class="week" data-adv="7" title="A week passes">+1 Week</button><button type="button" class="rent" data-rent title="Who can cover this month's rent and lifestyle. Whispered to you only.">Rent check</button></div>` : "");
   el.querySelector(".date").addEventListener("click", () => CalendarApp.open());
+  // Read-only, and the whole control block is GM-only already, so nothing here needs its own gate.
+  el.querySelector("[data-rent]")?.addEventListener("click", () => rentCheck().catch((e) => ui.notifications.error(e.message)));
   el.querySelectorAll("[data-adv]").forEach((b) => b.addEventListener("click", async () => {
     const days = Number(b.dataset.adv);
     try {

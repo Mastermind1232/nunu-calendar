@@ -7,6 +7,7 @@
 #nunu-cal-widget .ctrl button{width:100%;min-width:0;height:28px;margin:0;background:#26394e;border:1px solid #667e99;color:#fff;border-radius:3px;padding:0 8px;font-size:13px;font-weight:600;line-height:26px;white-space:nowrap;cursor:pointer}
 #nunu-cal-widget .ctrl button:hover{background:#364d66;box-shadow:none}
 #nunu-cal-widget .ctrl .week{background:#5a1f1f;border-color:#c62828}
+#nunu-cal-widget .ctrl .rent{grid-column:1 / -1;background:#2c4433;border-color:#5a8f6a}
 .nunu-cal .window-content{background:#121923;color:#e8edf4;font-family:var(--cpr-font-primary,"Jost"),Arial,sans-serif}
 .nunu-cal .nunu-cal-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .nunu-cal .nunu-cal-head h2{flex:1;margin:0;border:0;font-size:22px;text-align:center;font-family:var(--cpr-font-hero,"Rubik"),sans-serif}
@@ -52,6 +53,7 @@
 .nunu-cal .nunu-cal-head button{background:#26394e !important;color:#fff !important;border:1px solid #667e99 !important}
 #nunu-cal-widget .ctrl button{background:#26394e !important;color:#fff !important;border:1px solid #667e99 !important}
 #nunu-cal-widget .ctrl .week{background:#5a1f1f !important;border-color:#c62828 !important}
+#nunu-cal-widget .ctrl .rent{background:#2c4433 !important;border-color:#5a8f6a !important}
 #nunu-cal-widget .date{background:none !important;border:0 !important;color:#eee !important}
 
 #nunu-phone-btn{pointer-events:all;position:relative;width:auto;height:auto;aspect-ratio:1/1;margin:0;padding:0;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.72);border:1px solid #555;border-radius:6px;color:#eee;font-size:25px;line-height:1;cursor:pointer}
