@@ -1,4 +1,4 @@
-import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, EFFECT_LABELS, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells, daysBetween, dueOn, downtimeRecords, LIFESTYLE_COST, mergeQueue, hustleResult, HUSTLES, ROLE_BY_ABILITY} from "./lib.mjs";
+import {ID, DEFAULT_DATE, SEED_EVENTS, MONTHS, WEEKDAYS, EFFECT_LABELS, ROLL_MODE_LABELS, rollFormula, addDays, longDate, shortDate, parse, key, isDate, same, normalizeEvent, eventsOn, monthCells, daysBetween, dueOn, downtimeRecords, LIFESTYLE_COST, mergeQueue, hustleResult, HUSTLES, ROLE_BY_ABILITY} from "./lib.mjs";
 
 const SOCKET = `module.${ID}`;
 
@@ -157,6 +157,18 @@ async function resolve(msg, user) {
   } else if (rec.kind === "credit") {
     await actor.update(moneyUpdate(actor, rec.amount, `${rec.reason} (${rec.date})`));
     await receipt(`<b>${esc(actor.name)}</b> received ${rec.amount}eb: ${esc(rec.reason)}.`);
+  } else if (rec.kind === "roll") {
+    const formula = rollFormula(rec.dice);
+    if (!formula) throw new Error(`"${rec.dice}" is not a dice expression the calendar can roll. Fix the event.`);
+    const roll = await new Roll(formula).evaluate();
+    await roll.toMessage({speaker: {alias: "Calendar"}, flavor: `${rec.title}: ${rec.reason}`, whisper: [...gmIds, user.id]});
+    const total = Math.max(0, Math.floor(Number(roll.total) || 0));
+    if (rec.rollMode === "credit") {
+      await actor.update(moneyUpdate(actor, total, `${rec.reason} (${rec.date})`));
+      await receipt(`<b>${esc(actor.name)}</b> rolled ${esc(rec.dice)} and received <b>${total.toLocaleString()}eb</b>: ${esc(rec.reason)}.`);
+    } else {
+      await receipt(`<b>${esc(actor.name)}</b> rolled ${esc(rec.dice)} for ${esc(rec.reason)}: <b>${total.toLocaleString()}</b>. Nothing changed hands, record it yourself.`);
+    }
   } else if (rec.kind === "items") {
     const docs = [];
     for (const it of rec.items) {
@@ -215,6 +227,9 @@ function showPending() {
   } else if (rec.kind === "credit") {
     content = wrap(`<h3>${esc(rec.title)}</h3><p>You receive <b>${rec.amount}eb</b>. ${esc(rec.reason)}</p>`);
     buttons = {pay: {label: "Collect", callback: () => send({choice: "collect"})}};
+  } else if (rec.kind === "roll") {
+    content = wrap(`<h3>${esc(rec.title)}</h3><p>${esc(rec.reason)}</p><p class="dice">${esc(rec.dice)}</p>`);
+    buttons = {pay: {label: "Roll", callback: () => send({choice: "roll"})}};
   } else if (rec.kind === "items") {
     content = wrap(`<h3>${esc(rec.title)}</h3><p>${esc(rec.reason)}</p><ul>${rec.items.map((i) => `<li>${i.qty > 1 ? `${i.qty}× ` : ""}${esc(i.name)}</li>`).join("")}</ul>`);
     buttons = {pay: {label: "Collect", callback: () => send({choice: "collect"})}};
@@ -348,7 +363,8 @@ async function eventDialog(ev = {}) {
     <div class="users">${users.map((u) => `<label class="check"><input type="checkbox" name="users" value="${u.id}"${(ev.users ?? []).includes(u.id) ? " checked" : ""}> ${esc(u.name)}<input class="per" type="number" min="0" step="1" name="amount-${u.id}" value="${ev.amounts?.[u.id] ?? ""}" placeholder="eb" title="Amount for this player; blank uses the shared amount"></label>`).join("") || "<span class='hint'>No player users yet.</span>"}</div>
     <fieldset class="effect"><legend>When the day comes</legend>
       <label>What happens ${sel("effect", Object.entries(EFFECT_LABELS), ev.effect ?? "none")}</label>
-      <div class="row eddies"><label>Eddies<input name="amount" type="number" min="0" step="1" value="${ev.amount ?? 0}"></label><label>Ledger reason<input name="reason" value="${esc(ev.reason)}" placeholder="Rent, September 2045"></label></div>
+      <div class="row eddies"><label class="amt">Eddies<input name="amount" type="number" min="0" step="1" value="${ev.amount ?? 0}"></label><label>Ledger reason<input name="reason" value="${esc(ev.reason)}" placeholder="Rent, September 2045"></label></div>
+      <div class="row dice"><label>Dice<input name="dice" value="${esc(ev.dice)}" placeholder="1d6 x 500" maxlength="40"></label><label>What the total is ${sel("rollMode", Object.entries(ROLL_MODE_LABELS), ev.rollMode ?? "credit")}</label></div>
       <div class="items"><p class="hint">Drag items here from the Items tab or a compendium.</p><ul class="item-list">${(ev.items ?? []).map((i) => `<li data-uuid="${esc(i.uuid)}"><span>${esc(i.name)}</span> × <input type="number" min="1" step="1" value="${i.qty}" class="qty"> <a class="remove" title="Remove"><i class="fas fa-times"></i></a></li>`).join("")}</ul></div>
     </fieldset>
     <label>Notes<textarea name="notes" rows="3">${esc(ev.notes)}</textarea></label>
@@ -356,6 +372,7 @@ async function eventDialog(ev = {}) {
   const read = (html) => normalizeEvent({id: ev.id, title: html.find('[name=title]').val(), start: html.find('[name=start]').val(), end: html.find('[name=end]').val(),
     repeat: html.find('[name=repeat]').val(), visibility: html.find('[name=visibility]').val(), users: html.find('[name=users]:checked').map((i, el) => el.value).get(), notes: html.find('[name=notes]').val(),
     effect: html.find('[name=effect]').val(), amount: html.find('[name=amount]').val(), reason: html.find('[name=reason]').val(),
+    dice: html.find('[name=dice]').val(), rollMode: html.find('[name=rollMode]').val(),
     amounts: Object.fromEntries(html.find('.users .per').map((i, el) => [[el.name.replace("amount-", ""), el.value]]).get()),
     items: html.find('.item-list li').map((i, li) => ({uuid: li.dataset.uuid, name: li.querySelector("span").textContent, qty: li.querySelector(".qty").value})).get()});
   const buttons = {
@@ -375,7 +392,9 @@ async function eventDialog(ev = {}) {
       const sync = () => {
         html.find(".users").toggle(html.find('[name=visibility]').val() === "users");
         const effect = html.find('[name=effect]').val();
-        html.find(".eddies").toggle(["pay", "ask", "credit"].includes(effect)); html.find(".items").toggle(effect === "items");
+        html.find(".eddies").toggle(["pay", "ask", "credit", "roll"].includes(effect));
+        html.find(".eddies .amt").toggle(["pay", "ask", "credit"].includes(effect));
+        html.find(".items").toggle(effect === "items"); html.find(".dice").toggle(effect === "roll");
         html.find(".users .per").toggle(["pay", "credit"].includes(effect));
         html.find(".effect").toggleClass("blocked", effect !== "none" && html.find('[name=visibility]').val() === "gm");
       };

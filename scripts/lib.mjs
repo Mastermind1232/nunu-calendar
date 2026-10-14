@@ -32,8 +32,25 @@ export const shortDate = (date) => `${WEEKDAYS[weekday(date)].slice(0, 3)} ${dat
 /* Events: {id, title, start:"YYYY-MM-DD", end:"YYYY-MM-DD"|"", repeat:"none"|"weekly"|"monthly"|"yearly", visibility:"gm"|"all"|"users", users:[], notes:""} */
 export const REPEATS = ["none", "weekly", "monthly", "yearly"];
 /** What an event does to the people it applies to when its day arrives. */
-export const EFFECTS = ["none", "pay", "ask", "credit", "items", "rent"];
-export const EFFECT_LABELS = {none: "Nothing", pay: "They pay a set amount", ask: "They choose how much to pay", credit: "They receive eddies", items: "They receive items", rent: "Rent and lifestyle"};
+export const EFFECTS = ["none", "pay", "ask", "credit", "items", "roll", "rent"];
+export const EFFECT_LABELS = {none: "Nothing", pay: "They pay a set amount", ask: "They choose how much to pay", credit: "They receive eddies", items: "They receive items", roll: "They roll for what they get", rent: "Rent and lifestyle"};
+/** What a rolled event does with its total: bank it, or only say what it was. */
+export const ROLL_MODES = ["credit", "note"];
+export const ROLL_MODE_LABELS = {credit: "Eddies into their wallet", note: "Announce the number only"};
+/* A dice expression the calendar is willing to roll: NdM, optionally scaled and then offset.
+   "1d6 x 500" is the shape the supply line uses. Deliberately narrow: the string reaches
+   Foundry's Roll, so nothing arbitrary may pass through it. */
+export const DICE = /^\s*(\d{1,2})d(\d{1,3})\s*(?:[x*\u00d7]\s*(\d{1,6})\s*)?(?:([+-])\s*(\d{1,6})\s*)?$/i;
+/** The same expression as a formula Foundry can evaluate, or null when it is not one. */
+export function rollFormula(text) {
+  const m = DICE.exec(String(text ?? ""));
+  if (!m) return null;
+  const [, n, faces, mult, sign, offset] = m;
+  let out = `${Number(n)}d${Number(faces)}`;
+  if (mult) out = `(${out}) * ${Number(mult)}`;
+  if (offset) out += ` ${sign} ${Number(offset)}`;
+  return out;
+}
 export function normalizeEvent(raw = {}) {
   const start = parse(raw.start) ? raw.start.trim() : null;
   if (!start) throw new Error("An event needs a start date, written YYYY-MM-DD.");
@@ -49,11 +66,14 @@ export function normalizeEvent(raw = {}) {
   const items = effect === "items" ? (raw.items ?? []).filter((i) => i && i.uuid).map((i) => ({uuid: String(i.uuid), name: String(i.name ?? "Item").slice(0, 120), qty: Math.max(1, Math.floor(Number(i.qty) || 1))})) : [];
   if (effect !== "none" && visibility === "gm") throw new Error("A GM-only event cannot charge, pay or hand out anything. Set who it applies to.");
   if (effect === "items" && !items.length) throw new Error("Drop at least one item onto the event.");
+  const dice = effect === "roll" ? String(raw.dice ?? "").trim().slice(0, 40) : "";
+  const rollMode = ROLL_MODES.includes(raw.rollMode) ? raw.rollMode : "credit";
+  if (effect === "roll" && !rollFormula(dice)) throw new Error('Write the dice as something like "1d6 x 500".');
   const amounts = {};
   if (["pay", "credit"].includes(effect) && visibility === "users") for (const u of users) { const v = Math.floor(Number(raw.amounts?.[u])); if (Number.isFinite(v) && v > 0) amounts[u] = v; }
   if ((effect === "pay" || effect === "credit") && amount <= 0 && !Object.keys(amounts).length) throw new Error("Enter the amount of eddies.");
   return {id: String(raw.id || ""), title: title.slice(0, 120), start, end, repeat, visibility, users, notes: String(raw.notes ?? "").slice(0, 2000),
-    effect, amount, amounts, reason: String(raw.reason ?? "").trim().slice(0, 200), items};
+    effect, amount, amounts, reason: String(raw.reason ?? "").trim().slice(0, 200), items, dice, rollMode};
 }
 /** Does the event land on this day? Repeats are single-day; ranges do not repeat. */
 export function occursOn(ev, date) {
@@ -100,7 +120,7 @@ export function dueOn(events, date, users) {
     if (ev.effect === "none" || !occursOn(ev, date)) continue;
     for (const u of affectedUsers(ev, users)) {
       records.push({id: `${ev.id}:${key(date)}:${u.id}`, userId: String(u.id), kind: ev.effect, eventId: ev.id, title: ev.title, date: key(date),
-        amount: ev.amounts?.[String(u.id)] ?? ev.amount, reason: ev.reason || ev.title, items: ev.items});
+        amount: ev.amounts?.[String(u.id)] ?? ev.amount, reason: ev.reason || ev.title, items: ev.items, dice: ev.dice, rollMode: ev.rollMode});
     }
   }
   return records;

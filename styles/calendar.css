@@ -68,6 +68,7 @@
 .nunu-cal-dialog .bill tr.total td{border-bottom:0;padding-top:9px;font-weight:700;font-size:15px}
 .nunu-cal-dialog .bill tr.total td.amt{color:#8a6d1f}
 .nunu-cal-dialog .wallet{font-size:11.5px;color:#6f6d63;margin:2px 0 0}
+.nunu-cal-dialog .nunu-cal-prompt .dice{font-family:monospace;font-size:15px;letter-spacing:1px;text-align:center;margin:10px 0 2px;padding:6px;border:1px dashed #b9b4a6;border-radius:3px}
 .nunu-cal-dialog .wallet.short{color:#8b1e1e;font-weight:600}
 
 /* CPR sets the ledger rows to nowrap and clips the overflow, which eats the reason column.

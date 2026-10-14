@@ -1,6 +1,6 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {addDays, weekday, daysInMonth, ordinal, longDate, shortDate, parse, key, normalizeEvent, occursOn, canSee, eventsOn, monthCells, WEEKDAYS, daysBetween, dueOn, downtimeRecords, mergeQueue, hustleResult, HUSTLES} from "../scripts/lib.mjs";
+import {rollFormula, EFFECTS, addDays, weekday, daysInMonth, ordinal, longDate, shortDate, parse, key, normalizeEvent, occursOn, canSee, eventsOn, monthCells, WEEKDAYS, daysBetween, dueOn, downtimeRecords, mergeQueue, hustleResult, HUSTLES} from "../scripts/lib.mjs";
 
 test("date arithmetic crosses months and years", () => {
   assert.deepEqual(addDays({y: 2045, m: 9, d: 28}, 7), {y: 2045, m: 10, d: 5});
@@ -97,4 +97,33 @@ test("named players can each owe a different amount", () => {
   const due = dueOn([rent], {y: 2045, m: 9, d: 28}, [{id: "a"}, {id: "b"}, {id: "c"}]);
   assert.deepEqual(due.map((r) => [r.userId, r.amount]), [["a", 1100], ["b", 1800]]);
   assert.throws(() => normalizeEvent({title: "Rent", start: "2045-09-28", visibility: "users", users: ["a"], effect: "pay"}), /amount/);
+});
+
+test("a rolled event validates its dice and carries them to the people it lands on", () => {
+  assert.equal(EFFECTS.includes("roll"), true);
+  assert.equal(rollFormula("1d6 x 500"), "(1d6) * 500");
+  assert.equal(rollFormula("1d6 \u00d7 500"), "(1d6) * 500");
+  assert.equal(rollFormula("2d6"), "2d6");
+  assert.equal(rollFormula("2d6+3"), "2d6 + 3");
+  assert.equal(rollFormula("1d6*500-100"), "(1d6) * 500 - 100");
+  for (const bad of ["", "d6", "1d6 x", "1d6; shutdown()", "@actor.level", "1d6 x 500 x 2", "999d6"])
+    assert.equal(rollFormula(bad), null, `${bad} must not be rollable`);
+
+  assert.throws(() => normalizeEvent({title: "Drop", start: "2045-09-02", visibility: "users", users: ["u1"], effect: "roll", dice: "a pile"}), /dice/i);
+
+  const ev = normalizeEvent({id: "drop", title: "The mole's drop", start: "2045-09-02", repeat: "monthly",
+    visibility: "users", users: ["u1"], effect: "roll", dice: "1d6 x 500", rollMode: "note", reason: "Pharmaceuticals"});
+  assert.equal(ev.dice, "1d6 x 500");
+  assert.equal(ev.rollMode, "note");
+  const [rec] = dueOn([ev], {y: 2045, m: 10, d: 2}, [{id: "u1"}, {id: "u2"}]);
+  assert.equal(rec.kind, "roll");
+  assert.equal(rec.dice, "1d6 x 500");
+  assert.equal(rec.rollMode, "note");
+  assert.equal(dueOn([ev], {y: 2045, m: 10, d: 3}, [{id: "u1"}]).length, 0);
+});
+
+test("an unrolled effect keeps its dice empty, so nothing stale is carried", () => {
+  const ev = normalizeEvent({title: "Stipend", start: "2045-09-01", visibility: "users", users: ["u1"],
+    effect: "credit", amount: 1500, dice: "1d6 x 500"});
+  assert.equal(ev.dice, "");
 });
