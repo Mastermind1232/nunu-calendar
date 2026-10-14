@@ -127,3 +127,25 @@ test("an unrolled effect keeps its dice empty, so nothing stale is carried", () 
     effect: "credit", amount: 1500, dice: "1d6 x 500"});
   assert.equal(ev.dice, "");
 });
+
+test("a rolled event can hand over stock instead of eddies", () => {
+  const stock = [{uuid: "Item.abc", name: "Illegal Medical Supplies", qty: 1}];
+  const ev = normalizeEvent({id: "drop", title: "The mole's drop", start: "2045-10-02", repeat: "monthly",
+    visibility: "users", users: ["u1"], effect: "roll", dice: "1d6", rollMode: "items", items: stock,
+    reason: "Pharmaceuticals", button: "Collect Medical Supplies"});
+  assert.equal(ev.rollMode, "items");
+  assert.equal(ev.items.length, 1);
+  assert.equal(ev.button, "Collect Medical Supplies");
+  const [rec] = dueOn([ev], {y: 2045, m: 11, d: 2}, [{id: "u1"}]);
+  assert.equal(rec.kind, "roll");
+  assert.deepEqual(rec.items, ev.items);
+  assert.equal(rec.button, "Collect Medical Supplies");
+
+  assert.throws(() => normalizeEvent({title: "Drop", start: "2045-10-02", visibility: "users", users: ["u1"],
+    effect: "roll", dice: "1d6", rollMode: "items", items: []}), /Drop at least one item/);
+
+  // Paying eddies keeps no item list, so a mode change cannot leave stock behind.
+  const cash = normalizeEvent({title: "Drop", start: "2045-10-02", visibility: "users", users: ["u1"],
+    effect: "roll", dice: "1d6 x 500", rollMode: "credit", items: stock});
+  assert.deepEqual(cash.items, []);
+});

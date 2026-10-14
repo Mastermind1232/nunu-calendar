@@ -127,6 +127,29 @@ function actorRoles(actor) {
   }).filter((r) => r && r.rank >= 1);
 }
 
+/** Hand `count` of each listed item to the actor. Stock is fungible, so a stack the
+ *  character already carries grows rather than a second one appearing beside it.
+ *  Returns what was handed over, for the receipt. */
+async function grantStock(actor, items, count) {
+  if (count <= 0) return "nothing";
+  const made = [];
+  for (const it of items) {
+    const n = count * Math.max(1, Number(it.qty) || 1);
+    const held = actor.items.find((i) => i.name === it.name && "amount" in (i.system ?? {}));
+    if (held) {
+      await held.update({"system.amount": (Number(held.system.amount) || 0) + n});
+    } else {
+      const src = await fromUuid(it.uuid).catch(() => null);
+      if (!src) throw new Error(`Item not found: ${it.name}. Fix the event's items.`);
+      const data = src.toObject(); delete data._id;
+      if (data.system && "amount" in data.system) data.system.amount = n;
+      await actor.createEmbeddedDocuments("Item", [data]);
+    }
+    made.push(`${n}× ${esc(it.name)}`);
+  }
+  return made.join(", ");
+}
+
 /** Runs on the GM's client when a player answers a popup. Applies the result to their character, then clears the record. */
 async function resolve(msg, user) {
   const rec = getQueue().find((r) => r.id === msg.id && r.userId === user.id);
@@ -166,6 +189,11 @@ async function resolve(msg, user) {
     if (rec.rollMode === "credit") {
       await actor.update(moneyUpdate(actor, total, `${rec.reason} (${rec.date})`));
       await receipt(`<b>${esc(actor.name)}</b> rolled ${esc(rec.dice)} and received <b>${total.toLocaleString()}eb</b>: ${esc(rec.reason)}.`);
+    } else if (rec.rollMode === "items") {
+      const got = await grantStock(actor, rec.items, total);
+      await receipt(total
+        ? `<b>${esc(actor.name)}</b> rolled ${esc(rec.dice)} and took delivery of ${got}: ${esc(rec.reason)}.`
+        : `<b>${esc(actor.name)}</b> rolled ${esc(rec.dice)} and nothing came: ${esc(rec.reason)}.`);
     } else {
       await receipt(`<b>${esc(actor.name)}</b> rolled ${esc(rec.dice)} for ${esc(rec.reason)}: <b>${total.toLocaleString()}</b>. Nothing changed hands, record it yourself.`);
     }
@@ -229,7 +257,7 @@ function showPending() {
     buttons = {pay: {label: "Collect", callback: () => send({choice: "collect"})}};
   } else if (rec.kind === "roll") {
     content = wrap(`<h3>${esc(rec.title)}</h3><p>${esc(rec.reason)}</p><p class="dice">${esc(rec.dice)}</p>`);
-    buttons = {pay: {label: "Roll", callback: () => send({choice: "roll"})}};
+    buttons = {pay: {label: rec.button || "Roll", callback: () => send({choice: "roll"})}};
   } else if (rec.kind === "items") {
     content = wrap(`<h3>${esc(rec.title)}</h3><p>${esc(rec.reason)}</p><ul>${rec.items.map((i) => `<li>${i.qty > 1 ? `${i.qty}× ` : ""}${esc(i.name)}</li>`).join("")}</ul>`);
     buttons = {pay: {label: "Collect", callback: () => send({choice: "collect"})}};
@@ -365,6 +393,7 @@ async function eventDialog(ev = {}) {
       <label>What happens ${sel("effect", Object.entries(EFFECT_LABELS), ev.effect ?? "none")}</label>
       <div class="row eddies"><label class="amt">Eddies<input name="amount" type="number" min="0" step="1" value="${ev.amount ?? 0}"></label><label>Ledger reason<input name="reason" value="${esc(ev.reason)}" placeholder="Rent, September 2045"></label></div>
       <div class="row dice"><label>Dice<input name="dice" value="${esc(ev.dice)}" placeholder="1d6 x 500" maxlength="40"></label><label>What the total is ${sel("rollMode", Object.entries(ROLL_MODE_LABELS), ev.rollMode ?? "credit")}</label></div>
+      <div class="row dice"><label>Button<input name="button" value="${esc(ev.button)}" placeholder="Roll" maxlength="40"></label></div>
       <div class="items"><p class="hint">Drag items here from the Items tab or a compendium.</p><ul class="item-list">${(ev.items ?? []).map((i) => `<li data-uuid="${esc(i.uuid)}"><span>${esc(i.name)}</span> × <input type="number" min="1" step="1" value="${i.qty}" class="qty"> <a class="remove" title="Remove"><i class="fas fa-times"></i></a></li>`).join("")}</ul></div>
     </fieldset>
     <label>Notes<textarea name="notes" rows="3">${esc(ev.notes)}</textarea></label>
@@ -372,7 +401,7 @@ async function eventDialog(ev = {}) {
   const read = (html) => normalizeEvent({id: ev.id, title: html.find('[name=title]').val(), start: html.find('[name=start]').val(), end: html.find('[name=end]').val(),
     repeat: html.find('[name=repeat]').val(), visibility: html.find('[name=visibility]').val(), users: html.find('[name=users]:checked').map((i, el) => el.value).get(), notes: html.find('[name=notes]').val(),
     effect: html.find('[name=effect]').val(), amount: html.find('[name=amount]').val(), reason: html.find('[name=reason]').val(),
-    dice: html.find('[name=dice]').val(), rollMode: html.find('[name=rollMode]').val(),
+    dice: html.find('[name=dice]').val(), rollMode: html.find('[name=rollMode]').val(), button: html.find('[name=button]').val(),
     amounts: Object.fromEntries(html.find('.users .per').map((i, el) => [[el.name.replace("amount-", ""), el.value]]).get()),
     items: html.find('.item-list li').map((i, li) => ({uuid: li.dataset.uuid, name: li.querySelector("span").textContent, qty: li.querySelector(".qty").value})).get()});
   const buttons = {
@@ -394,11 +423,13 @@ async function eventDialog(ev = {}) {
         const effect = html.find('[name=effect]').val();
         html.find(".eddies").toggle(["pay", "ask", "credit", "roll"].includes(effect));
         html.find(".eddies .amt").toggle(["pay", "ask", "credit"].includes(effect));
-        html.find(".items").toggle(effect === "items"); html.find(".dice").toggle(effect === "roll");
+        const rollMode = html.find('[name=rollMode]').val();
+        html.find(".items").toggle(effect === "items" || (effect === "roll" && rollMode === "items"));
+        html.find(".dice").toggle(effect === "roll");
         html.find(".users .per").toggle(["pay", "credit"].includes(effect));
         html.find(".effect").toggleClass("blocked", effect !== "none" && html.find('[name=visibility]').val() === "gm");
       };
-      html.find('[name=visibility], [name=effect]').on("change", sync); sync();
+      html.find('[name=visibility], [name=effect], [name=rollMode]').on("change", sync); sync();
       html.find(".items").on("click", ".remove", (e) => e.currentTarget.closest("li").remove());
       const zone = html.find(".items")[0];
       zone.addEventListener("dragover", (e) => e.preventDefault());

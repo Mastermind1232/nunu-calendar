@@ -35,8 +35,8 @@ export const REPEATS = ["none", "weekly", "monthly", "yearly"];
 export const EFFECTS = ["none", "pay", "ask", "credit", "items", "roll", "rent"];
 export const EFFECT_LABELS = {none: "Nothing", pay: "They pay a set amount", ask: "They choose how much to pay", credit: "They receive eddies", items: "They receive items", roll: "They roll for what they get", rent: "Rent and lifestyle"};
 /** What a rolled event does with its total: bank it, or only say what it was. */
-export const ROLL_MODES = ["credit", "note"];
-export const ROLL_MODE_LABELS = {credit: "Eddies into their wallet", note: "Announce the number only"};
+export const ROLL_MODES = ["credit", "note", "items"];
+export const ROLL_MODE_LABELS = {credit: "Eddies into their wallet", note: "Announce the number only", items: "That many of the item below"};
 /* A dice expression the calendar is willing to roll: NdM, optionally scaled and then offset.
    "1d6 x 500" is the shape the supply line uses. Deliberately narrow: the string reaches
    Foundry's Roll, so nothing arbitrary may pass through it. */
@@ -63,17 +63,20 @@ export function normalizeEvent(raw = {}) {
   const users = visibility === "users" ? [...new Set((raw.users ?? []).map(String).filter(Boolean))] : [];
   const effect = EFFECTS.includes(raw.effect) ? raw.effect : "none";
   const amount = Math.max(0, Math.floor(Number(raw.amount) || 0));
-  const items = effect === "items" ? (raw.items ?? []).filter((i) => i && i.uuid).map((i) => ({uuid: String(i.uuid), name: String(i.name ?? "Item").slice(0, 120), qty: Math.max(1, Math.floor(Number(i.qty) || 1))})) : [];
-  if (effect !== "none" && visibility === "gm") throw new Error("A GM-only event cannot charge, pay or hand out anything. Set who it applies to.");
-  if (effect === "items" && !items.length) throw new Error("Drop at least one item onto the event.");
-  const dice = effect === "roll" ? String(raw.dice ?? "").trim().slice(0, 40) : "";
   const rollMode = ROLL_MODES.includes(raw.rollMode) ? raw.rollMode : "credit";
+  // A rolled event that hands over stock carries the same item list a plain items event does.
+  const wantsItems = effect === "items" || (effect === "roll" && rollMode === "items");
+  const items = wantsItems ? (raw.items ?? []).filter((i) => i && i.uuid).map((i) => ({uuid: String(i.uuid), name: String(i.name ?? "Item").slice(0, 120), qty: Math.max(1, Math.floor(Number(i.qty) || 1))})) : [];
+  if (effect !== "none" && visibility === "gm") throw new Error("A GM-only event cannot charge, pay or hand out anything. Set who it applies to.");
+  if (wantsItems && !items.length) throw new Error("Drop at least one item onto the event.");
+  const dice = effect === "roll" ? String(raw.dice ?? "").trim().slice(0, 40) : "";
   if (effect === "roll" && !rollFormula(dice)) throw new Error('Write the dice as something like "1d6 x 500".');
+  const button = String(raw.button ?? "").trim().slice(0, 40);
   const amounts = {};
   if (["pay", "credit"].includes(effect) && visibility === "users") for (const u of users) { const v = Math.floor(Number(raw.amounts?.[u])); if (Number.isFinite(v) && v > 0) amounts[u] = v; }
   if ((effect === "pay" || effect === "credit") && amount <= 0 && !Object.keys(amounts).length) throw new Error("Enter the amount of eddies.");
   return {id: String(raw.id || ""), title: title.slice(0, 120), start, end, repeat, visibility, users, notes: String(raw.notes ?? "").slice(0, 2000),
-    effect, amount, amounts, reason: String(raw.reason ?? "").trim().slice(0, 200), items, dice, rollMode};
+    effect, amount, amounts, reason: String(raw.reason ?? "").trim().slice(0, 200), items, dice, rollMode, button};
 }
 /** Does the event land on this day? Repeats are single-day; ranges do not repeat. */
 export function occursOn(ev, date) {
@@ -120,7 +123,7 @@ export function dueOn(events, date, users) {
     if (ev.effect === "none" || !occursOn(ev, date)) continue;
     for (const u of affectedUsers(ev, users)) {
       records.push({id: `${ev.id}:${key(date)}:${u.id}`, userId: String(u.id), kind: ev.effect, eventId: ev.id, title: ev.title, date: key(date),
-        amount: ev.amounts?.[String(u.id)] ?? ev.amount, reason: ev.reason || ev.title, items: ev.items, dice: ev.dice, rollMode: ev.rollMode});
+        amount: ev.amounts?.[String(u.id)] ?? ev.amount, reason: ev.reason || ev.title, items: ev.items, dice: ev.dice, rollMode: ev.rollMode, button: ev.button});
     }
   }
   return records;
